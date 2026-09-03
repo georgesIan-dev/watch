@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-    <title>Laravel 9</title>
+    <title>Monitoring System</title>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 

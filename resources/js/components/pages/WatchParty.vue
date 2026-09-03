@@ -9,16 +9,13 @@
         </v-snackbar>
 
         <!-- MAIN CARD -->
-        <v-card style="border-radius: 0px; min-height: 86vh; border: 1px solid black">
+        <v-card variant="flat" color="surface" class="border" min-height="86vh">
             <v-card-text>
                 <!-- HEADER -->
-                <div class="text-h6 font-weight-bold text-primary mb-3">WATCH PARTY</div>
+                <div class="text-h6 font-weight-bold text-primary mb-3">Watch Party</div>
 
                 <!-- SEARCH -->
-                <v-card
-                    class="mb-4 pa-3"
-                    style="border: 2px solid black; background-color: #fff9e6"
-                >
+                <v-card variant="tonal" color="surface-variant" class="mb-4 pa-3">
                     <div class="d-flex align-center ga-2">
                         <v-text-field
                             v-model="searchQuery"
@@ -46,11 +43,11 @@
                 <v-row>
                     <!-- LEFT: PLAYER -->
                     <v-col cols="12" md="8">
-                        <v-card style="border: 1px solid black">
+                        <v-card variant="flat" color="surface-bright" class="border">
                             <v-card-text class="pa-0">
                                 <div v-if="currentVideoId" class="player-wrapper">
                                     <iframe
-                                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                                        :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0`"
                                         title="YouTube video player"
                                         frameborder="0"
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -72,7 +69,7 @@
                         </div>
 
                         <!-- QUEUE -->
-                        <v-card class="mt-4" style="border: 1px solid black">
+                        <v-card variant="flat" color="surface-bright" class="mt-4 border">
                             <v-card-text>
                                 <div class="text-subtitle-2 font-weight-bold mb-2">
                                     Queue ({{ queue.length }})
@@ -109,7 +106,7 @@
 
                     <!-- RIGHT: SEARCH RESULTS -->
                     <v-col cols="12" md="4">
-                        <v-card style="border: 1px solid black; height: 100%">
+                        <v-card variant="flat" color="surface-bright" class="border" height="100%">
                             <v-card-text>
                                 <div class="text-subtitle-2 font-weight-bold mb-2">
                                     Search Results
@@ -303,6 +300,6 @@ export default {
 .player-placeholder {
     width: 100%;
     height: 400px;
-    background-color: #f5f5f5;
+    background-color: rgb(var(--v-theme-surface-variant));
 }
 </style>
