@@ -35,18 +35,49 @@
             </div>
 
             <div class="chat-main">
-                <div class="chat-greeting">Hey there,</div>
+                <template v-if="chatMessages.length === 0">
+                    <div class="chat-greeting">Hey there,</div>
+                </template>
+
+                <div v-else class="chat-thread" ref="chatThread">
+                    <div
+                        v-for="(msg, index) in chatMessages"
+                        :key="index"
+                        :class="['chat-bubble', msg.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--ai']"
+                    >
+                        <pre v-if="msg.role === 'ai'" class="chat-code">{{ msg.text }}</pre>
+                        <span v-else>{{ msg.text }}</span>
+                    </div>
+
+                    <div v-if="aiTyping" class="chat-bubble chat-bubble--ai chat-bubble--typing">
+                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    </div>
+                </div>
 
                 <div class="chat-input-box">
-                    <div class="chat-input-placeholder">How can I help you today?</div>
+                    <textarea
+                        v-model="chatInput"
+                        class="chat-input-field"
+                        placeholder="How can I help you today?"
+                        rows="1"
+                        @keydown.enter.exact.prevent="sendChatMessage"
+                    ></textarea>
                     <div class="chat-input-toolbar">
                         <v-icon size="18">mdi-plus</v-icon>
                         <span class="chat-toolbar-chip">Chat</span>
                         <span class="chat-toolbar-chip chat-toolbar-chip--muted">Cowork</span>
+                        <v-spacer />
+                        <v-btn
+                            icon="mdi-send"
+                            size="small"
+                            variant="text"
+                            :disabled="!chatInput.trim() || aiTyping"
+                            @click="sendChatMessage"
+                        />
                     </div>
                 </div>
 
-                <div class="chat-quick-actions">
+                <div v-if="chatMessages.length === 0" class="chat-quick-actions">
                     <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-pencil-outline</v-icon> Write</span>
                     <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-school-outline</v-icon> Learn</span>
                     <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-code-tags</v-icon> Code</span>
@@ -250,10 +281,6 @@
 
 <script>
 import axios from "axios";
-
-// YouTube Data API v3 key, exposed to the client build via Vite.
-// Set VITE_YOUTUBE_API_KEY in your .env file (must be prefixed with VITE_
-// for Vite to expose it to the frontend).
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 
@@ -277,6 +304,19 @@ export default {
             // Floating window state
             isFloating: false,
             chatMode: false,
+            chatInput: "",
+            chatMessages: [],
+            aiTyping: false,
+            codeSnippets: [
+                "function calculateTotal(items) {\n    return items.reduce((sum, i) => sum + i.price, 0);\n}",
+                "const debounce = (fn, delay) => {\n    let timer;\n    return (...args) => {\n        clearTimeout(timer);\n        timer = setTimeout(() => fn(...args), delay);\n    };\n};",
+                "SELECT users.name, COUNT(orders.id) AS total_orders\nFROM users\nLEFT JOIN orders ON orders.user_id = users.id\nGROUP BY users.id;",
+                "public function index()\n{\n    return response()->json(\n        Employee::with('department')->get()\n    );\n}",
+                "const isEven = (n) => n % 2 === 0;\nconsole.log([1,2,3,4].filter(isEven));",
+                "class Stack {\n    constructor() { this.items = []; }\n    push(item) { this.items.push(item); }\n    pop() { return this.items.pop(); }\n}",
+                "export default {\n    computed: {\n        fullName() {\n            return `${this.first} ${this.last}`;\n        }\n    }\n}",
+                "def fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a",
+            ],
             floatPos: { x: 0, y: 0 },
             floatSize: { w: 360, h: 240 },
             drag: null,
@@ -386,6 +426,31 @@ export default {
         closeFloating() {
             this.isFloating = false;
             this.chatMode = false;
+        },
+
+        sendChatMessage() {
+            const text = this.chatInput.trim();
+            if (!text || this.aiTyping) return;
+
+            this.chatMessages.push({ role: "user", text });
+            this.chatInput = "";
+            this.aiTyping = true;
+            this.scrollChatToBottom();
+
+            const delay = 1000 + Math.random() * 1000;
+            setTimeout(() => {
+                const snippet = this.codeSnippets[Math.floor(Math.random() * this.codeSnippets.length)];
+                this.chatMessages.push({ role: "ai", text: snippet });
+                this.aiTyping = false;
+                this.scrollChatToBottom();
+            }, delay);
+        },
+
+        scrollChatToBottom() {
+            this.$nextTick(() => {
+                const el = this.$refs.chatThread;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
         },
 
         startDrag(event) {
@@ -634,6 +699,75 @@ export default {
     justify-content: center;
     gap: 20px;
     padding: 24px;
+    min-height: 0;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.chat-thread {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 640px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px 4px;
+}
+
+.chat-bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.chat-bubble--user {
+    align-self: flex-end;
+    background-color: #2a2a2a;
+    color: #f2f2f2;
+}
+
+.chat-bubble--ai {
+    align-self: flex-start;
+    background-color: #171717;
+    border: 1px solid #2a2a2a;
+    color: #d4d4d4;
+}
+
+.chat-code {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.chat-bubble--typing {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 14px;
+}
+
+.chat-bubble--typing .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #8a8a8a;
+    animation: chat-dot-bounce 1.2s infinite ease-in-out;
+}
+
+.chat-bubble--typing .dot:nth-child(2) { animation-delay: 0.15s; }
+.chat-bubble--typing .dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-dot-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-4px); opacity: 1; }
 }
 
 .chat-greeting {
@@ -657,6 +791,22 @@ export default {
     color: #8a8a8a;
     font-size: 0.95rem;
     margin-bottom: 18px;
+}
+
+.chat-input-field {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: #f2f2f2;
+    font-size: 0.95rem;
+    font-family: inherit;
+    margin-bottom: 18px;
+}
+
+.chat-input-field::placeholder {
+    color: #8a8a8a;
 }
 
 .chat-input-toolbar {
