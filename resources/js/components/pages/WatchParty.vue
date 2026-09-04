@@ -70,7 +70,7 @@
             </div>
             <div class="float-body">
                 <iframe
-                    :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
                     title="Floating YouTube video player"
                     frameborder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
