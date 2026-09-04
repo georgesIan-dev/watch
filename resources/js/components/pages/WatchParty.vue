@@ -308,14 +308,189 @@ export default {
             chatMessages: [],
             aiTyping: false,
             codeSnippets: [
-                "function calculateTotal(items) {\n    return items.reduce((sum, i) => sum + i.price, 0);\n}",
-                "const debounce = (fn, delay) => {\n    let timer;\n    return (...args) => {\n        clearTimeout(timer);\n        timer = setTimeout(() => fn(...args), delay);\n    };\n};",
-                "SELECT users.name, COUNT(orders.id) AS total_orders\nFROM users\nLEFT JOIN orders ON orders.user_id = users.id\nGROUP BY users.id;",
-                "public function index()\n{\n    return response()->json(\n        Employee::with('department')->get()\n    );\n}",
-                "const isEven = (n) => n % 2 === 0;\nconsole.log([1,2,3,4].filter(isEven));",
-                "class Stack {\n    constructor() { this.items = []; }\n    push(item) { this.items.push(item); }\n    pop() { return this.items.pop(); }\n}",
-                "export default {\n    computed: {\n        fullName() {\n            return `${this.first} ${this.last}`;\n        }\n    }\n}",
-                "def fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a",
+                    `import axios from "axios";
+
+                    export default {
+                        name: "EmployeeMonitor",
+                        data() {
+                            return {
+                                employees: [],
+                                attendanceLogs: [],
+                                loading: false,
+                                searchQuery: "",
+                                filters: {
+                                    department: null,
+                                    status: null,
+                                    dateRange: [],
+                                },
+                            };
+                        },
+                        computed: {
+                            filteredEmployees() {
+                                return this.employees.filter((emp) => {
+                                    const matchesSearch = emp.name
+                                        .toLowerCase()
+                                        .includes(this.searchQuery.toLowerCase());
+                                    const matchesDept = !this.filters.department || emp.department === this.filters.department;
+                                    return matchesSearch && matchesDept;
+                                });
+                            },
+                            totalPresent() {
+                                return this.attendanceLogs.filter((log) => log.status === "Present").length;
+                            },
+                        },
+                        methods: {
+                            async fetchEmployees() {
+                                this.loading = true;
+                                try {
+                                    const res = await axios.get("/api/employees");
+                                    this.employees = res.data;
+                                } catch (err) {
+                                    console.error("Failed to fetch employees:", err);
+                                } finally {
+                                    this.loading = false;
+                                }
+                            },
+                            async checkIn(employeeId) {
+                                const timestamp = new Date().toISOString();
+                                await axios.post("/api/attendance/check-in", {
+                                    employee_id: employeeId,
+                                    time_in: timestamp,
+                                });
+                                this.fetchAttendanceLogs();
+                            },
+                            async checkOut(employeeId) {
+                                const timestamp = new Date().toISOString();
+                                await axios.post("/api/attendance/check-out", {
+                                    employee_id: employeeId,
+                                    time_out: timestamp,
+                                });
+                                this.fetchAttendanceLogs();
+                            },
+                            async fetchAttendanceLogs() {
+                                const res = await axios.get("/api/attendance/logs", {
+                                    params: this.filters,
+                                });
+                                this.attendanceLogs = res.data;
+                            },
+                            exportToCsv() {
+                                const rows = this.filteredEmployees.map((e) => [e.id, e.name, e.department]);
+                                const csv = rows.map((r) => r.join(",")).join("\\n");
+                                const blob = new Blob([csv], { type: "text/csv" });
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download = "employees.csv";
+                                link.click();
+                            },
+                        },
+                        mounted() {
+                            this.fetchEmployees();
+                            this.fetchAttendanceLogs();
+                        },
+                    };`,
+                        `<?php
+
+                    namespace App\\Http\\Controllers;
+
+                    use App\\Models\\Employee;
+                    use App\\Models\\Attendance;
+                    use Illuminate\\Http\\Request;
+
+                    class AttendanceController extends Controller
+                    {
+                        public function index(Request $request)
+                        {
+                            $query = Attendance::with('employee');
+
+                            if ($request->filled('department')) {
+                                $query->whereHas('employee', function ($q) use ($request) {
+                                    $q->where('department', $request->department);
+                                });
+                            }
+
+                            if ($request->filled('date_from') && $request->filled('date_to')) {
+                                $query->whereBetween('time_in', [$request->date_from, $request->date_to]);
+                            }
+
+                            return response()->json($query->orderByDesc('time_in')->paginate(20));
+                        }
+
+                        public function checkIn(Request $request)
+                        {
+                            $validated = $request->validate([
+                                'employee_id' => 'required|exists:employees,id',
+                            ]);
+
+                            $attendance = Attendance::create([
+                                'employee_id' => $validated['employee_id'],
+                                'time_in' => now(),
+                                'status' => now()->format('H:i') > '06:15' ? 'Late' : 'On Time',
+                            ]);
+
+                            return response()->json($attendance, 201);
+                        }
+
+                        public function checkOut(Request $request, Attendance $attendance)
+                        {
+                            $attendance->update([
+                                'time_out' => now(),
+                                'status' => 'Time Out',
+                            ]);
+
+                            return response()->json($attendance);
+                        }
+
+                        public function summary()
+                        {
+                            return response()->json([
+                                'total_employees' => Employee::count(),
+                                'present_today' => Attendance::whereDate('time_in', today())->count(),
+                                'late_today' => Attendance::whereDate('time_in', today())
+                                    ->where('status', 'Late')
+                                    ->count(),
+                            ]);
+                        }
+                    }`,
+                        `function calculateTotal(items) {
+                        return items.reduce((sum, i) => sum + i.price, 0);
+                    }`,
+                        `const debounce = (fn, delay) => {
+                        let timer;
+                        return (...args) => {
+                            clearTimeout(timer);
+                            timer = setTimeout(() => fn(...args), delay);
+                        };
+                    };`,
+                        `SELECT users.name, COUNT(orders.id) AS total_orders
+                    FROM users
+                    LEFT JOIN orders ON orders.user_id = users.id
+                    GROUP BY users.id;`,
+                        `public function index()
+                    {
+                        return response()->json(
+                            Employee::with('department')->get()
+                        );
+                    }`,
+                        `const isEven = (n) => n % 2 === 0;
+                    console.log([1,2,3,4].filter(isEven));`,
+                        `class Stack {
+                        constructor() { this.items = []; }
+                        push(item) { this.items.push(item); }
+                        pop() { return this.items.pop(); }
+                    }`,
+                        `export default {
+                        computed: {
+                            fullName() {
+                                return \`\${this.first} \${this.last}\`;
+                            }
+                        }
+                    }`,
+                        `def fibonacci(n):
+                        a, b = 0, 1
+                        for _ in range(n):
+                            a, b = b, a + b
+                        return a`,
             ],
             floatPos: { x: 0, y: 0 },
             floatSize: { w: 360, h: 240 },
