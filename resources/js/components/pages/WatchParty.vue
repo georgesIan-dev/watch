@@ -120,7 +120,7 @@
                             <v-card-text class="pa-0 position-relative">
                                 <div v-if="currentVideoId" class="player-wrapper">
                                     <iframe
-                                        :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
                                         title="YouTube video player"
                                         frameborder="0"
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
