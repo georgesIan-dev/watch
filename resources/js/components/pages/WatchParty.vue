@@ -65,7 +65,7 @@
             <div class="float-header" @mousedown="startDrag">
                 <span class="float-title">{{ currentVideoTitle || 'Now Playing' }}</span>
                 <div class="float-actions">
-                    <v-btn icon="mdi-close" size="x-small" variant="text" title="Close" @click="closeFloating" />
+                    <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
                 </div>
             </div>
             <div class="float-body">
@@ -386,8 +386,6 @@ export default {
         closeFloating() {
             this.isFloating = false;
             this.chatMode = false;
-            this.currentVideoId = "";
-            this.currentVideoTitle = "";
         },
 
         startDrag(event) {
