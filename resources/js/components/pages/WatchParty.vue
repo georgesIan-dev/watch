@@ -157,10 +157,10 @@
                     </div>
                 </v-card>
 
+                <!-- PLAYER AREA (contained, not full-bleed) -->
                 <v-row>
-                    <!-- LEFT: PLAYER -->
-                    <v-col cols="12" md="8">
-                        <v-card variant="flat" color="surface-bright" class="border">
+                    <v-col cols="12">
+                        <v-card variant="flat" color="surface-bright" class="border player-card mx-auto">
                             <v-card-text class="pa-0 position-relative">
                                 <div v-if="!currentVideoId" class="player-placeholder d-flex align-center justify-center">
                                     <div class="text-center text-medium-emphasis">
@@ -183,101 +183,101 @@
                             </v-card-text>
                         </v-card>
 
-                        <div v-if="currentVideoTitle" class="text-subtitle-1 font-weight-bold mt-2">
+                        <div v-if="currentVideoTitle" class="text-subtitle-1 font-weight-bold mt-2 player-card mx-auto">
                             {{ currentVideoTitle }}
                         </div>
-
-                        <!-- QUEUE -->
-                        <v-card variant="flat" color="surface-bright" class="mt-4 border">
-                            <v-card-text>
-                                <div class="text-subtitle-2 font-weight-bold mb-2">
-                                    Queue ({{ queue.length }})
-                                </div>
-                                <div v-if="queue.length === 0" class="text-medium-emphasis">
-                                    No videos queued yet. Add videos from the search results.
-                                </div>
-                                <v-list v-else density="compact">
-                                    <v-list-item
-                                        v-for="(item, index) in queue"
-                                        :key="item.videoId + index"
-                                    >
-                                        <template v-slot:prepend>
-                                            <v-avatar rounded size="48">
-                                                <v-img :src="item.thumbnail" cover></v-img>
-                                            </v-avatar>
-                                        </template>
-                                        <v-list-item-title class="text-body-2">
-                                            {{ item.title }}
-                                        </v-list-item-title>
-                                        <template v-slot:append>
-                                            <v-btn icon variant="text" size="small" @click="playFromQueue(index)">
-                                                <v-icon>mdi-play</v-icon>
-                                            </v-btn>
-                                            <v-btn icon variant="text" size="small" @click="removeFromQueue(index)">
-                                                <v-icon>mdi-close</v-icon>
-                                            </v-btn>
-                                        </template>
-                                    </v-list-item>
-                                </v-list>
-                            </v-card-text>
-                        </v-card>
-                    </v-col>
-
-                    <!-- RIGHT: SEARCH RESULTS -->
-                    <v-col cols="12" md="4">
-                        <v-card variant="flat" color="surface-bright" class="border" height="100%">
-                            <v-card-text>
-                                <div class="text-subtitle-2 font-weight-bold mb-2">
-                                    Search Results
-                                </div>
-
-                                <div v-if="loading" class="d-flex justify-center pa-4">
-                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                                </div>
-
-                                <div v-else-if="results.length === 0" class="text-medium-emphasis">
-                                    No results yet. Try searching for something above.
-                                </div>
-
-                                <v-list v-else lines="two" density="compact">
-                                    <v-list-item
-                                        v-for="video in results"
-                                        :key="video.videoId"
-                                        @click="playVideo(video)"
-                                    >
-                                        <template v-slot:prepend>
-                                            <v-avatar rounded size="64">
-                                                <v-img :src="video.thumbnail" cover></v-img>
-                                            </v-avatar>
-                                        </template>
-                                        <v-list-item-title class="text-body-2 font-weight-medium">
-                                            {{ video.title }}
-                                        </v-list-item-title>
-                                        <v-list-item-subtitle>
-                                            {{ video.channelTitle }}
-                                        </v-list-item-subtitle>
-                                        <template v-slot:append>
-                                            <v-btn
-                                                icon
-                                                variant="text"
-                                                size="small"
-                                                @click.stop="addToQueue(video)"
-                                            >
-                                                <v-icon>mdi-plus</v-icon>
-                                            </v-btn>
-                                        </template>
-                                    </v-list-item>
-                                </v-list>
-
-                                <div v-if="nextPageToken" class="d-flex justify-center mt-2">
-                                    <v-btn variant="text" size="small" @click="searchVideos(true)">
-                                        Load more
-                                    </v-btn>
-                                </div>
-                            </v-card-text>
-                        </v-card>
                     </v-col>
                 </v-row>
+
+                <!-- QUEUE -->
+                <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                    <v-card-text>
+                        <div class="text-subtitle-2 font-weight-bold mb-2">
+                            Queue ({{ queue.length }})
+                        </div>
+                        <div v-if="queue.length === 0" class="text-medium-emphasis">
+                            No videos queued yet. Add videos from the search results.
+                        </div>
+                        <v-row v-else>
+                            <v-col
+                                v-for="(item, index) in queue"
+                                :key="item.videoId + index"
+                                cols="6"
+                                sm="4"
+                                md="3"
+                                lg="2"
+                            >
+                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playFromQueue(index)">
+                                    <v-img :src="item.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-btn
+                                            icon="mdi-close"
+                                            size="x-small"
+                                            variant="flat"
+                                            color="surface"
+                                            class="grid-remove-btn"
+                                            @click.stop="removeFromQueue(index)"
+                                        />
+                                    </v-img>
+                                    <div class="pa-2">
+                                        <div class="text-caption font-weight-medium grid-title">{{ item.title }}</div>
+                                    </div>
+                                </v-card>
+                            </v-col>
+                        </v-row>
+                    </v-card-text>
+                </v-card>
+
+                <!-- SEARCH RESULTS (grid) -->
+                <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                    <v-card-text>
+                        <div class="text-subtitle-2 font-weight-bold mb-2">
+                            Search Results
+                        </div>
+
+                        <div v-if="loading" class="d-flex justify-center pa-4">
+                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                        </div>
+
+                        <div v-else-if="results.length === 0" class="text-medium-emphasis">
+                            No results yet. Try searching for something above.
+                        </div>
+
+                        <v-row v-else>
+                            <v-col
+                                v-for="video in results"
+                                :key="video.videoId"
+                                cols="6"
+                                sm="4"
+                                md="3"
+                                lg="2"
+                            >
+                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
+                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-btn
+                                            icon="mdi-plus"
+                                            size="x-small"
+                                            variant="flat"
+                                            color="surface"
+                                            class="grid-remove-btn"
+                                            title="Add to queue"
+                                            @click.stop="addToQueue(video)"
+                                        />
+                                    </v-img>
+                                    <div class="pa-2">
+                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
+                                        <div class="text-caption text-medium-emphasis">{{ video.channelTitle }}</div>
+                                    </div>
+                                </v-card>
+                            </v-col>
+                        </v-row>
+
+                        <div v-if="nextPageToken" class="d-flex justify-center mt-3">
+                            <v-btn variant="text" size="small" @click="searchVideos(true)">
+                                Load more
+                            </v-btn>
+                        </div>
+                    </v-card-text>
+                </v-card>
             </v-card-text>
         </v-card>
     </div>
@@ -716,18 +716,25 @@ console.log([1,2,3,4].filter(isEven));`,
 </script>
 
 <style scoped>
+.player-card {
+    max-width: 900px;
+}
+
 .player-host {
     position: relative;
     width: 100%;
-    max-width: 100%;
     aspect-ratio: 16 / 9;
     background-color: black;
     border-radius: 12px;
     overflow: hidden;
 }
+
 .player-host:not(.player-host--floating) {
+    max-width: 900px;
     max-height: 480px;
+    margin: 0 auto;
 }
+
 .player-host--floating {
     position: fixed;
     z-index: 2400;
@@ -743,7 +750,10 @@ console.log([1,2,3,4].filter(isEven));`,
 
 .player-reserve {
     width: 100%;
-    padding-top: 56.25%;
+    max-width: 900px;
+    aspect-ratio: 16 / 9;
+    max-height: 480px;
+    margin: 0 auto;
 }
 
 .player-frame-wrap {
@@ -764,7 +774,9 @@ console.log([1,2,3,4].filter(isEven));`,
 .player-placeholder,
 .docked-placeholder {
     width: 100%;
+    max-width: 900px;
     height: 400px;
+    margin: 0 auto;
     background-color: rgb(var(--v-theme-surface-variant));
 }
 
@@ -820,6 +832,33 @@ console.log([1,2,3,4].filter(isEven));`,
     border-right: 2px solid rgb(var(--v-theme-on-surface-variant));
     border-bottom: 2px solid rgb(var(--v-theme-on-surface-variant));
     opacity: 0.6;
+}
+
+/* ===== GRID CARDS (queue + search results) ===== */
+.grid-card {
+    cursor: pointer;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.grid-thumb {
+    position: relative;
+}
+
+.grid-remove-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    opacity: 0.9;
+}
+
+.grid-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.3;
 }
 
 /* ===== CHAT MODE OVERLAY ===== */
