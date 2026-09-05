@@ -8,6 +8,18 @@
             </template>
         </v-snackbar>
 
+        <!-- SHARED PLAYER (single iframe, teleported between docked/floating slots so it never reloads/restarts) -->
+        <Teleport :to="isFloating ? '#float-player-slot' : '#docked-player-slot'" v-if="currentVideoId">
+            <iframe
+                :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                title="YouTube video player"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+                class="player-frame"
+            ></iframe>
+        </Teleport>
+
         <!-- CHAT MODE OVERLAY (shown while the video is floating) -->
         <div v-if="chatMode" class="chat-overlay">
             <div class="chat-sidebar">
@@ -86,7 +98,7 @@
             </div>
         </div>
 
-        <!-- FLOATING VIDEO WINDOW -->
+        <!-- FLOATING VIDEO WINDOW (the iframe teleports into #float-player-slot when isFloating is true) -->
         <div
             v-if="currentVideoId && isFloating"
             ref="floatWindow"
@@ -100,14 +112,7 @@
                 </div>
             </div>
             <div class="float-body">
-                <iframe
-                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                    title="Floating YouTube video player"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen
-                    class="float-frame"
-                ></iframe>
+                <div id="float-player-slot" class="float-slot"></div>
             </div>
             <div class="float-resize-handle" @mousedown="startResize"></div>
         </div>
@@ -150,14 +155,7 @@
                         <v-card variant="flat" color="surface-bright" class="border">
                             <v-card-text class="pa-0 position-relative">
                                 <div v-if="currentVideoId" class="player-wrapper">
-                                    <iframe
-                                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                                        title="YouTube video player"
-                                        frameborder="0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowfullscreen
-                                        class="player-frame"
-                                    ></iframe>
+                                    <div id="docked-player-slot" class="docked-slot"></div>
 
                                     <v-btn
                                         icon="mdi-picture-in-picture-top-right"
@@ -281,6 +279,10 @@
 
 <script>
 import axios from "axios";
+
+// YouTube Data API v3 key, exposed to the client build via Vite.
+// Set VITE_YOUTUBE_API_KEY in your .env file (must be prefixed with VITE_
+// for Vite to expose it to the frontend).
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 
@@ -308,189 +310,189 @@ export default {
             chatMessages: [],
             aiTyping: false,
             codeSnippets: [
-                    `import axios from "axios";
+                `import axios from "axios";
 
-                    export default {
-                        name: "EmployeeMonitor",
-                        data() {
-                            return {
-                                employees: [],
-                                attendanceLogs: [],
-                                loading: false,
-                                searchQuery: "",
-                                filters: {
-                                    department: null,
-                                    status: null,
-                                    dateRange: [],
-                                },
-                            };
-                        },
-                        computed: {
-                            filteredEmployees() {
-                                return this.employees.filter((emp) => {
-                                    const matchesSearch = emp.name
-                                        .toLowerCase()
-                                        .includes(this.searchQuery.toLowerCase());
-                                    const matchesDept = !this.filters.department || emp.department === this.filters.department;
-                                    return matchesSearch && matchesDept;
-                                });
-                            },
-                            totalPresent() {
-                                return this.attendanceLogs.filter((log) => log.status === "Present").length;
-                            },
-                        },
-                        methods: {
-                            async fetchEmployees() {
-                                this.loading = true;
-                                try {
-                                    const res = await axios.get("/api/employees");
-                                    this.employees = res.data;
-                                } catch (err) {
-                                    console.error("Failed to fetch employees:", err);
-                                } finally {
-                                    this.loading = false;
-                                }
-                            },
-                            async checkIn(employeeId) {
-                                const timestamp = new Date().toISOString();
-                                await axios.post("/api/attendance/check-in", {
-                                    employee_id: employeeId,
-                                    time_in: timestamp,
-                                });
-                                this.fetchAttendanceLogs();
-                            },
-                            async checkOut(employeeId) {
-                                const timestamp = new Date().toISOString();
-                                await axios.post("/api/attendance/check-out", {
-                                    employee_id: employeeId,
-                                    time_out: timestamp,
-                                });
-                                this.fetchAttendanceLogs();
-                            },
-                            async fetchAttendanceLogs() {
-                                const res = await axios.get("/api/attendance/logs", {
-                                    params: this.filters,
-                                });
-                                this.attendanceLogs = res.data;
-                            },
-                            exportToCsv() {
-                                const rows = this.filteredEmployees.map((e) => [e.id, e.name, e.department]);
-                                const csv = rows.map((r) => r.join(",")).join("\\n");
-                                const blob = new Blob([csv], { type: "text/csv" });
-                                const url = URL.createObjectURL(blob);
-                                const link = document.createElement("a");
-                                link.href = url;
-                                link.download = "employees.csv";
-                                link.click();
-                            },
-                        },
-                        mounted() {
-                            this.fetchEmployees();
-                            this.fetchAttendanceLogs();
-                        },
-                    };`,
-                        `<?php
+export default {
+    name: "EmployeeMonitor",
+    data() {
+        return {
+            employees: [],
+            attendanceLogs: [],
+            loading: false,
+            searchQuery: "",
+            filters: {
+                department: null,
+                status: null,
+                dateRange: [],
+            },
+        };
+    },
+    computed: {
+        filteredEmployees() {
+            return this.employees.filter((emp) => {
+                const matchesSearch = emp.name
+                    .toLowerCase()
+                    .includes(this.searchQuery.toLowerCase());
+                const matchesDept = !this.filters.department || emp.department === this.filters.department;
+                return matchesSearch && matchesDept;
+            });
+        },
+        totalPresent() {
+            return this.attendanceLogs.filter((log) => log.status === "Present").length;
+        },
+    },
+    methods: {
+        async fetchEmployees() {
+            this.loading = true;
+            try {
+                const res = await axios.get("/api/employees");
+                this.employees = res.data;
+            } catch (err) {
+                console.error("Failed to fetch employees:", err);
+            } finally {
+                this.loading = false;
+            }
+        },
+        async checkIn(employeeId) {
+            const timestamp = new Date().toISOString();
+            await axios.post("/api/attendance/check-in", {
+                employee_id: employeeId,
+                time_in: timestamp,
+            });
+            this.fetchAttendanceLogs();
+        },
+        async checkOut(employeeId) {
+            const timestamp = new Date().toISOString();
+            await axios.post("/api/attendance/check-out", {
+                employee_id: employeeId,
+                time_out: timestamp,
+            });
+            this.fetchAttendanceLogs();
+        },
+        async fetchAttendanceLogs() {
+            const res = await axios.get("/api/attendance/logs", {
+                params: this.filters,
+            });
+            this.attendanceLogs = res.data;
+        },
+        exportToCsv() {
+            const rows = this.filteredEmployees.map((e) => [e.id, e.name, e.department]);
+            const csv = rows.map((r) => r.join(",")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "employees.csv";
+            link.click();
+        },
+    },
+    mounted() {
+        this.fetchEmployees();
+        this.fetchAttendanceLogs();
+    },
+};`,
+                `<?php
 
-                    namespace App\\Http\\Controllers;
+namespace App\Http\Controllers;
 
-                    use App\\Models\\Employee;
-                    use App\\Models\\Attendance;
-                    use Illuminate\\Http\\Request;
+use App\Models\Employee;
+use App\Models\Attendance;
+use Illuminate\Http\Request;
 
-                    class AttendanceController extends Controller
-                    {
-                        public function index(Request $request)
-                        {
-                            $query = Attendance::with('employee');
+class AttendanceController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Attendance::with('employee');
 
-                            if ($request->filled('department')) {
-                                $query->whereHas('employee', function ($q) use ($request) {
-                                    $q->where('department', $request->department);
-                                });
-                            }
+        if ($request->filled('department')) {
+            $query->whereHas('employee', function ($q) use ($request) {
+                $q->where('department', $request->department);
+            });
+        }
 
-                            if ($request->filled('date_from') && $request->filled('date_to')) {
-                                $query->whereBetween('time_in', [$request->date_from, $request->date_to]);
-                            }
+        if ($request->filled('date_from') && $request->filled('date_to')) {
+            $query->whereBetween('time_in', [$request->date_from, $request->date_to]);
+        }
 
-                            return response()->json($query->orderByDesc('time_in')->paginate(20));
-                        }
+        return response()->json($query->orderByDesc('time_in')->paginate(20));
+    }
 
-                        public function checkIn(Request $request)
-                        {
-                            $validated = $request->validate([
-                                'employee_id' => 'required|exists:employees,id',
-                            ]);
+    public function checkIn(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+        ]);
 
-                            $attendance = Attendance::create([
-                                'employee_id' => $validated['employee_id'],
-                                'time_in' => now(),
-                                'status' => now()->format('H:i') > '06:15' ? 'Late' : 'On Time',
-                            ]);
+        $attendance = Attendance::create([
+            'employee_id' => $validated['employee_id'],
+            'time_in' => now(),
+            'status' => now()->format('H:i') > '06:15' ? 'Late' : 'On Time',
+        ]);
 
-                            return response()->json($attendance, 201);
-                        }
+        return response()->json($attendance, 201);
+    }
 
-                        public function checkOut(Request $request, Attendance $attendance)
-                        {
-                            $attendance->update([
-                                'time_out' => now(),
-                                'status' => 'Time Out',
-                            ]);
+    public function checkOut(Request $request, Attendance $attendance)
+    {
+        $attendance->update([
+            'time_out' => now(),
+            'status' => 'Time Out',
+        ]);
 
-                            return response()->json($attendance);
-                        }
+        return response()->json($attendance);
+    }
 
-                        public function summary()
-                        {
-                            return response()->json([
-                                'total_employees' => Employee::count(),
-                                'present_today' => Attendance::whereDate('time_in', today())->count(),
-                                'late_today' => Attendance::whereDate('time_in', today())
-                                    ->where('status', 'Late')
-                                    ->count(),
-                            ]);
-                        }
-                    }`,
-                        `function calculateTotal(items) {
-                        return items.reduce((sum, i) => sum + i.price, 0);
-                    }`,
-                        `const debounce = (fn, delay) => {
-                        let timer;
-                        return (...args) => {
-                            clearTimeout(timer);
-                            timer = setTimeout(() => fn(...args), delay);
-                        };
-                    };`,
-                        `SELECT users.name, COUNT(orders.id) AS total_orders
-                    FROM users
-                    LEFT JOIN orders ON orders.user_id = users.id
-                    GROUP BY users.id;`,
-                        `public function index()
-                    {
-                        return response()->json(
-                            Employee::with('department')->get()
-                        );
-                    }`,
-                        `const isEven = (n) => n % 2 === 0;
-                    console.log([1,2,3,4].filter(isEven));`,
-                        `class Stack {
-                        constructor() { this.items = []; }
-                        push(item) { this.items.push(item); }
-                        pop() { return this.items.pop(); }
-                    }`,
-                        `export default {
-                        computed: {
-                            fullName() {
-                                return \`\${this.first} \${this.last}\`;
-                            }
-                        }
-                    }`,
-                        `def fibonacci(n):
-                        a, b = 0, 1
-                        for _ in range(n):
-                            a, b = b, a + b
-                        return a`,
+    public function summary()
+    {
+        return response()->json([
+            'total_employees' => Employee::count(),
+            'present_today' => Attendance::whereDate('time_in', today())->count(),
+            'late_today' => Attendance::whereDate('time_in', today())
+                ->where('status', 'Late')
+                ->count(),
+        ]);
+    }
+}`,
+                `function calculateTotal(items) {
+    return items.reduce((sum, i) => sum + i.price, 0);
+}`,
+                `const debounce = (fn, delay) => {
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+    };
+};`,
+                `SELECT users.name, COUNT(orders.id) AS total_orders
+FROM users
+LEFT JOIN orders ON orders.user_id = users.id
+GROUP BY users.id;`,
+                `public function index()
+{
+    return response()->json(
+        Employee::with('department')->get()
+    );
+}`,
+                `const isEven = (n) => n % 2 === 0;
+console.log([1,2,3,4].filter(isEven));`,
+                `class Stack {
+    constructor() { this.items = []; }
+    push(item) { this.items.push(item); }
+    pop() { return this.items.pop(); }
+}`,
+                `export default {
+    computed: {
+        fullName() {
+            return \`\${this.first} \${this.last}\`;
+        }
+    }
+}`,
+                `def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a`,
             ],
             floatPos: { x: 0, y: 0 },
             floatSize: { w: 360, h: 240 },
@@ -704,12 +706,17 @@ export default {
     width: 100%;
     padding-top: 56.25%; /* 16:9 aspect ratio */
 }
-.player-frame {
+.docked-slot {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
+}
+.docked-slot :deep(iframe) {
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 .player-placeholder {
     width: 100%;
@@ -769,9 +776,13 @@ export default {
     background-color: black;
 }
 
-.float-frame {
+.float-slot {
     position: absolute;
     inset: 0;
+    width: 100%;
+    height: 100%;
+}
+.float-slot :deep(iframe) {
     width: 100%;
     height: 100%;
     border: 0;
