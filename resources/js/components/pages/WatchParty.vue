@@ -158,7 +158,7 @@
                 </v-card>
 
                 <!-- PLAYER AREA (contained, not full-bleed) -->
-                <v-row>
+                <v-row v-if="currentVideoId">
                     <v-col cols="12">
                         <v-card variant="flat" color="surface-bright" class="border player-card mx-auto">
                             <v-card-text class="pa-0 position-relative">
@@ -182,10 +182,6 @@
                                 </div>
                             </v-card-text>
                         </v-card>
-
-                        <!-- <div v-if="currentVideoTitle" class="text-subtitle-1 font-weight-bold mt-2 player-card mx-auto">
-                            {{ currentVideoTitle }}
-                        </div> -->
                     </v-col>
                 </v-row>
 
