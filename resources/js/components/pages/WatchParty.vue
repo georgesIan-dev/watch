@@ -8,6 +8,45 @@
             </template>
         </v-snackbar>
 
+        <!-- SHARED PLAYER HOST — one persistent iframe, repositioned via CSS between docked/floating -->
+        <div
+            v-if="currentVideoId"
+            class="player-host"
+            :class="{ 'player-host--floating': isFloating }"
+            :style="isFloating ? floatStyle : {}"
+        >
+            <div v-if="isFloating" class="float-header" @mousedown="startDrag">
+                <span class="float-title">{{ currentVideoTitle || 'Now Playing' }}</span>
+                <div class="float-actions">
+                    <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
+                </div>
+            </div>
+
+            <div class="player-frame-wrap">
+                <iframe
+                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                    title="YouTube video player"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    class="player-frame"
+                ></iframe>
+
+                <v-btn
+                    v-if="!isFloating"
+                    icon="mdi-picture-in-picture-top-right"
+                    size="small"
+                    variant="flat"
+                    color="surface"
+                    class="float-toggle-btn"
+                    title="Pop out to floating window"
+                    @click="openFloating"
+                />
+            </div>
+
+            <div v-if="isFloating" class="float-resize-handle" @mousedown="startResize"></div>
+        </div>
+
         <!-- CHAT MODE OVERLAY (shown while the video is floating) -->
         <div v-if="chatMode" class="chat-overlay">
             <div class="chat-sidebar">
@@ -86,32 +125,6 @@
             </div>
         </div>
 
-        <!-- FLOATING VIDEO WINDOW -->
-        <div
-            v-if="currentVideoId && isFloating"
-            ref="floatWindow"
-            class="float-window"
-            :style="{ top: floatPos.y + 'px', left: floatPos.x + 'px', width: floatSize.w + 'px', height: floatSize.h + 'px' }"
-        >
-            <div class="float-header" @mousedown="startDrag">
-                <span class="float-title">{{ currentVideoTitle || 'Now Playing' }}</span>
-                <div class="float-actions">
-                    <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
-                </div>
-            </div>
-            <div class="float-body">
-                <iframe
-                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                    title="Floating YouTube video player"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen
-                    class="float-frame"
-                ></iframe>
-            </div>
-            <div class="float-resize-handle" @mousedown="startResize"></div>
-        </div>
-
         <!-- MAIN CARD -->
         <v-card v-if="!chatMode" variant="flat" color="surface" class="border" min-height="86vh">
             <v-card-text>
@@ -149,31 +162,23 @@
                     <v-col cols="12" md="8">
                         <v-card variant="flat" color="surface-bright" class="border">
                             <v-card-text class="pa-0 position-relative">
-                                <div v-if="currentVideoId" class="player-wrapper">
-                                    <iframe
-                                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                                        title="YouTube video player"
-                                        frameborder="0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowfullscreen
-                                        class="player-frame"
-                                    ></iframe>
-
-                                    <v-btn
-                                        icon="mdi-picture-in-picture-top-right"
-                                        size="small"
-                                        variant="flat"
-                                        color="surface"
-                                        class="float-toggle-btn"
-                                        title="Pop out to floating window"
-                                        @click="openFloating"
-                                    />
-                                </div>
-
-                                <div v-else class="player-placeholder d-flex align-center justify-center">
+                                <!-- Reserved space in the layout; the actual player-host is fixed-positioned on top when floating -->
+                                <div v-if="!currentVideoId" class="player-placeholder d-flex align-center justify-center">
                                     <div class="text-center text-medium-emphasis">
                                         <v-icon size="64">mdi-youtube</v-icon>
                                         <div class="mt-2">Search for a video and select it to start watching</div>
+                                    </div>
+                                </div>
+
+                                <div v-else-if="!isFloating" class="player-reserve"></div>
+
+                                <div v-else class="docked-placeholder d-flex align-center justify-center">
+                                    <div class="text-center text-medium-emphasis">
+                                        <v-icon size="48">mdi-picture-in-picture-top-right</v-icon>
+                                        <div class="mt-2">Playing in floating window</div>
+                                        <v-btn size="small" variant="text" color="primary" class="mt-2" @click="isFloating = false">
+                                            Dock back here
+                                        </v-btn>
                                     </div>
                                 </div>
                             </v-card-text>
@@ -281,6 +286,10 @@
 
 <script>
 import axios from "axios";
+
+// YouTube Data API v3 key, exposed to the client build via Vite.
+// Set VITE_YOUTUBE_API_KEY in your .env file (must be prefixed with VITE_
+// for Vite to expose it to the frontend).
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 
@@ -308,195 +317,205 @@ export default {
             chatMessages: [],
             aiTyping: false,
             codeSnippets: [
-                    `import axios from "axios";
+                `import axios from "axios";
 
-                    export default {
-                        name: "EmployeeMonitor",
-                        data() {
-                            return {
-                                employees: [],
-                                attendanceLogs: [],
-                                loading: false,
-                                searchQuery: "",
-                                filters: {
-                                    department: null,
-                                    status: null,
-                                    dateRange: [],
-                                },
-                            };
-                        },
-                        computed: {
-                            filteredEmployees() {
-                                return this.employees.filter((emp) => {
-                                    const matchesSearch = emp.name
-                                        .toLowerCase()
-                                        .includes(this.searchQuery.toLowerCase());
-                                    const matchesDept = !this.filters.department || emp.department === this.filters.department;
-                                    return matchesSearch && matchesDept;
-                                });
-                            },
-                            totalPresent() {
-                                return this.attendanceLogs.filter((log) => log.status === "Present").length;
-                            },
-                        },
-                        methods: {
-                            async fetchEmployees() {
-                                this.loading = true;
-                                try {
-                                    const res = await axios.get("/api/employees");
-                                    this.employees = res.data;
-                                } catch (err) {
-                                    console.error("Failed to fetch employees:", err);
-                                } finally {
-                                    this.loading = false;
-                                }
-                            },
-                            async checkIn(employeeId) {
-                                const timestamp = new Date().toISOString();
-                                await axios.post("/api/attendance/check-in", {
-                                    employee_id: employeeId,
-                                    time_in: timestamp,
-                                });
-                                this.fetchAttendanceLogs();
-                            },
-                            async checkOut(employeeId) {
-                                const timestamp = new Date().toISOString();
-                                await axios.post("/api/attendance/check-out", {
-                                    employee_id: employeeId,
-                                    time_out: timestamp,
-                                });
-                                this.fetchAttendanceLogs();
-                            },
-                            async fetchAttendanceLogs() {
-                                const res = await axios.get("/api/attendance/logs", {
-                                    params: this.filters,
-                                });
-                                this.attendanceLogs = res.data;
-                            },
-                            exportToCsv() {
-                                const rows = this.filteredEmployees.map((e) => [e.id, e.name, e.department]);
-                                const csv = rows.map((r) => r.join(",")).join("\\n");
-                                const blob = new Blob([csv], { type: "text/csv" });
-                                const url = URL.createObjectURL(blob);
-                                const link = document.createElement("a");
-                                link.href = url;
-                                link.download = "employees.csv";
-                                link.click();
-                            },
-                        },
-                        mounted() {
-                            this.fetchEmployees();
-                            this.fetchAttendanceLogs();
-                        },
-                    };`,
-                        `<?php
+export default {
+    name: "EmployeeMonitor",
+    data() {
+        return {
+            employees: [],
+            attendanceLogs: [],
+            loading: false,
+            searchQuery: "",
+            filters: {
+                department: null,
+                status: null,
+                dateRange: [],
+            },
+        };
+    },
+    computed: {
+        filteredEmployees() {
+            return this.employees.filter((emp) => {
+                const matchesSearch = emp.name
+                    .toLowerCase()
+                    .includes(this.searchQuery.toLowerCase());
+                const matchesDept = !this.filters.department || emp.department === this.filters.department;
+                return matchesSearch && matchesDept;
+            });
+        },
+        totalPresent() {
+            return this.attendanceLogs.filter((log) => log.status === "Present").length;
+        },
+    },
+    methods: {
+        async fetchEmployees() {
+            this.loading = true;
+            try {
+                const res = await axios.get("/api/employees");
+                this.employees = res.data;
+            } catch (err) {
+                console.error("Failed to fetch employees:", err);
+            } finally {
+                this.loading = false;
+            }
+        },
+        async checkIn(employeeId) {
+            const timestamp = new Date().toISOString();
+            await axios.post("/api/attendance/check-in", {
+                employee_id: employeeId,
+                time_in: timestamp,
+            });
+            this.fetchAttendanceLogs();
+        },
+        async checkOut(employeeId) {
+            const timestamp = new Date().toISOString();
+            await axios.post("/api/attendance/check-out", {
+                employee_id: employeeId,
+                time_out: timestamp,
+            });
+            this.fetchAttendanceLogs();
+        },
+        async fetchAttendanceLogs() {
+            const res = await axios.get("/api/attendance/logs", {
+                params: this.filters,
+            });
+            this.attendanceLogs = res.data;
+        },
+        exportToCsv() {
+            const rows = this.filteredEmployees.map((e) => [e.id, e.name, e.department]);
+            const csv = rows.map((r) => r.join(",")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "employees.csv";
+            link.click();
+        },
+    },
+    mounted() {
+        this.fetchEmployees();
+        this.fetchAttendanceLogs();
+    },
+};`,
+                `<?php
 
-                    namespace App\\Http\\Controllers;
+namespace App\Http\Controllers;
 
-                    use App\\Models\\Employee;
-                    use App\\Models\\Attendance;
-                    use Illuminate\\Http\\Request;
+use App\Models\Employee;
+use App\Models\Attendance;
+use Illuminate\Http\Request;
 
-                    class AttendanceController extends Controller
-                    {
-                        public function index(Request $request)
-                        {
-                            $query = Attendance::with('employee');
+class AttendanceController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Attendance::with('employee');
 
-                            if ($request->filled('department')) {
-                                $query->whereHas('employee', function ($q) use ($request) {
-                                    $q->where('department', $request->department);
-                                });
-                            }
+        if ($request->filled('department')) {
+            $query->whereHas('employee', function ($q) use ($request) {
+                $q->where('department', $request->department);
+            });
+        }
 
-                            if ($request->filled('date_from') && $request->filled('date_to')) {
-                                $query->whereBetween('time_in', [$request->date_from, $request->date_to]);
-                            }
+        if ($request->filled('date_from') && $request->filled('date_to')) {
+            $query->whereBetween('time_in', [$request->date_from, $request->date_to]);
+        }
 
-                            return response()->json($query->orderByDesc('time_in')->paginate(20));
-                        }
+        return response()->json($query->orderByDesc('time_in')->paginate(20));
+    }
 
-                        public function checkIn(Request $request)
-                        {
-                            $validated = $request->validate([
-                                'employee_id' => 'required|exists:employees,id',
-                            ]);
+    public function checkIn(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+        ]);
 
-                            $attendance = Attendance::create([
-                                'employee_id' => $validated['employee_id'],
-                                'time_in' => now(),
-                                'status' => now()->format('H:i') > '06:15' ? 'Late' : 'On Time',
-                            ]);
+        $attendance = Attendance::create([
+            'employee_id' => $validated['employee_id'],
+            'time_in' => now(),
+            'status' => now()->format('H:i') > '06:15' ? 'Late' : 'On Time',
+        ]);
 
-                            return response()->json($attendance, 201);
-                        }
+        return response()->json($attendance, 201);
+    }
 
-                        public function checkOut(Request $request, Attendance $attendance)
-                        {
-                            $attendance->update([
-                                'time_out' => now(),
-                                'status' => 'Time Out',
-                            ]);
+    public function checkOut(Request $request, Attendance $attendance)
+    {
+        $attendance->update([
+            'time_out' => now(),
+            'status' => 'Time Out',
+        ]);
 
-                            return response()->json($attendance);
-                        }
+        return response()->json($attendance);
+    }
 
-                        public function summary()
-                        {
-                            return response()->json([
-                                'total_employees' => Employee::count(),
-                                'present_today' => Attendance::whereDate('time_in', today())->count(),
-                                'late_today' => Attendance::whereDate('time_in', today())
-                                    ->where('status', 'Late')
-                                    ->count(),
-                            ]);
-                        }
-                    }`,
-                        `function calculateTotal(items) {
-                        return items.reduce((sum, i) => sum + i.price, 0);
-                    }`,
-                        `const debounce = (fn, delay) => {
-                        let timer;
-                        return (...args) => {
-                            clearTimeout(timer);
-                            timer = setTimeout(() => fn(...args), delay);
-                        };
-                    };`,
-                        `SELECT users.name, COUNT(orders.id) AS total_orders
-                    FROM users
-                    LEFT JOIN orders ON orders.user_id = users.id
-                    GROUP BY users.id;`,
-                        `public function index()
-                    {
-                        return response()->json(
-                            Employee::with('department')->get()
-                        );
-                    }`,
-                        `const isEven = (n) => n % 2 === 0;
-                    console.log([1,2,3,4].filter(isEven));`,
-                        `class Stack {
-                        constructor() { this.items = []; }
-                        push(item) { this.items.push(item); }
-                        pop() { return this.items.pop(); }
-                    }`,
-                        `export default {
-                        computed: {
-                            fullName() {
-                                return \`\${this.first} \${this.last}\`;
-                            }
-                        }
-                    }`,
-                        `def fibonacci(n):
-                        a, b = 0, 1
-                        for _ in range(n):
-                            a, b = b, a + b
-                        return a`,
-                ],
+    public function summary()
+    {
+        return response()->json([
+            'total_employees' => Employee::count(),
+            'present_today' => Attendance::whereDate('time_in', today())->count(),
+            'late_today' => Attendance::whereDate('time_in', today())
+                ->where('status', 'Late')
+                ->count(),
+        ]);
+    }
+}`,
+                `function calculateTotal(items) {
+    return items.reduce((sum, i) => sum + i.price, 0);
+}`,
+                `const debounce = (fn, delay) => {
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+    };
+};`,
+                `SELECT users.name, COUNT(orders.id) AS total_orders
+FROM users
+LEFT JOIN orders ON orders.user_id = users.id
+GROUP BY users.id;`,
+                `public function index()
+{
+    return response()->json(
+        Employee::with('department')->get()
+    );
+}`,
+                `const isEven = (n) => n % 2 === 0;
+console.log([1,2,3,4].filter(isEven));`,
+                `class Stack {
+    constructor() { this.items = []; }
+    push(item) { this.items.push(item); }
+    pop() { return this.items.pop(); }
+}`,
+                `export default {
+    computed: {
+        fullName() {
+            return \`\${this.first} \${this.last}\`;
+        }
+    }
+}`,
+                `def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a`,
+            ],
             floatPos: { x: 0, y: 0 },
             floatSize: { w: 360, h: 240 },
             drag: null,
             resize: null,
         };
+    },
+    computed: {
+        floatStyle() {
+            return {
+                top: this.floatPos.y + 'px',
+                left: this.floatPos.x + 'px',
+                width: this.floatSize.w + 'px',
+                height: this.floatSize.h + 'px',
+            };
+        },
     },
     watch: {
         searchQuery(newVal) {
@@ -589,7 +608,6 @@ export default {
         },
 
         openFloating() {
-            // Default to the bottom-right corner of the viewport
             this.floatPos = {
                 x: Math.max(16, window.innerWidth - this.floatSize.w - 24),
                 y: Math.max(16, window.innerHeight - this.floatSize.h - 24),
@@ -699,19 +717,50 @@ export default {
 </script>
 
 <style scoped>
-.player-wrapper {
+.player-host {
     position: relative;
     width: 100%;
-    padding-top: 56.25%; /* 16:9 aspect ratio */
+    aspect-ratio: 16 / 9;
+    background-color: black;
+    border-radius: 12px;
+    overflow: hidden;
 }
-.player-frame {
-    position: absolute;
-    top: 0;
-    left: 0;
+
+.player-host--floating {
+    position: fixed;
+    z-index: 2400;
+    aspect-ratio: unset;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgb(var(--v-theme-surface-variant));
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    min-width: 240px;
+    min-height: 160px;
+}
+
+.player-reserve {
+    width: 100%;
+    padding-top: 56.25%;
+}
+
+.player-frame-wrap {
+    position: relative;
+    flex: 1 1 auto;
     width: 100%;
     height: 100%;
 }
-.player-placeholder {
+
+.player-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.player-placeholder,
+.docked-placeholder {
     width: 100%;
     height: 400px;
     background-color: rgb(var(--v-theme-surface-variant));
@@ -722,20 +771,6 @@ export default {
     top: 8px;
     right: 8px;
     opacity: 0.85;
-}
-
-.float-window {
-    position: fixed;
-    z-index: 2400;
-    display: flex;
-    flex-direction: column;
-    background-color: rgb(var(--v-theme-surface-bright));
-    border: 1px solid rgb(var(--v-theme-surface-variant));
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    overflow: hidden;
-    min-width: 240px;
-    min-height: 160px;
 }
 
 .float-header {
@@ -756,25 +791,12 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 75%;
+    color: white;
 }
 
 .float-actions {
     display: flex;
     align-items: center;
-}
-
-.float-body {
-    position: relative;
-    flex: 1 1 auto;
-    background-color: black;
-}
-
-.float-frame {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: 0;
 }
 
 .float-resize-handle {
