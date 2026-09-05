@@ -744,12 +744,15 @@ console.log([1,2,3,4].filter(isEven));`,
     min-height: 160px;
 }
 
-.player-reserve {
+/* .player-reserve {
     width: 100%;
     max-width: 900px;
     aspect-ratio: 16 / 9;
     max-height: 480px;
     margin: 0 auto;
+} */
+.player-reserve {
+    display: none;
 }
 
 .player-frame-wrap {
