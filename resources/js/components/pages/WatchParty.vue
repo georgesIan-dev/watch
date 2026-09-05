@@ -162,7 +162,6 @@
                     <v-col cols="12" md="8">
                         <v-card variant="flat" color="surface-bright" class="border">
                             <v-card-text class="pa-0 position-relative">
-                                <!-- Reserved space in the layout; the actual player-host is fixed-positioned on top when floating -->
                                 <div v-if="!currentVideoId" class="player-placeholder d-flex align-center justify-center">
                                     <div class="text-center text-medium-emphasis">
                                         <v-icon size="64">mdi-youtube</v-icon>
@@ -720,12 +719,15 @@ console.log([1,2,3,4].filter(isEven));`,
 .player-host {
     position: relative;
     width: 100%;
+    max-width: 100%;
     aspect-ratio: 16 / 9;
     background-color: black;
     border-radius: 12px;
     overflow: hidden;
 }
-
+.player-host:not(.player-host--floating) {
+    max-height: 480px;
+}
 .player-host--floating {
     position: fixed;
     z-index: 2400;
