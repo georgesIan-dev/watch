@@ -183,9 +183,9 @@
                             </v-card-text>
                         </v-card>
 
-                        <div v-if="currentVideoTitle" class="text-subtitle-1 font-weight-bold mt-2 player-card mx-auto">
+                        <!-- <div v-if="currentVideoTitle" class="text-subtitle-1 font-weight-bold mt-2 player-card mx-auto">
                             {{ currentVideoTitle }}
-                        </div>
+                        </div> -->
                     </v-col>
                 </v-row>
 
