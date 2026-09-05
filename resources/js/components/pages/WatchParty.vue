@@ -100,7 +100,7 @@
 
         <!-- FLOATING VIDEO WINDOW (the iframe teleports into #float-player-slot when isFloating is true) -->
         <div
-            v-if="currentVideoId && isFloating"
+            v-show="currentVideoId && isFloating"
             ref="floatWindow"
             class="float-window"
             :style="{ top: floatPos.y + 'px', left: floatPos.x + 'px', width: floatSize.w + 'px', height: floatSize.h + 'px' }"
@@ -154,7 +154,7 @@
                     <v-col cols="12" md="8">
                         <v-card variant="flat" color="surface-bright" class="border">
                             <v-card-text class="pa-0 position-relative">
-                                <div v-if="currentVideoId" class="player-wrapper">
+                                <div class="player-wrapper" v-show="currentVideoId">
                                     <div id="docked-player-slot" class="docked-slot"></div>
 
                                     <v-btn
@@ -168,7 +168,7 @@
                                     />
                                 </div>
 
-                                <div v-else class="player-placeholder d-flex align-center justify-center">
+                                <div v-show="!currentVideoId" class="player-placeholder d-flex align-center justify-center">
                                     <div class="text-center text-medium-emphasis">
                                         <v-icon size="64">mdi-youtube</v-icon>
                                         <div class="mt-2">Search for a video and select it to start watching</div>
