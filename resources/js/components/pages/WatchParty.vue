@@ -155,6 +155,16 @@
                             Search
                         </v-btn>
                     </div>
+                    <v-btn-toggle
+                        v-model="searchOrder"
+                        color="primary"
+                        density="comfortable"
+                        mandatory
+                        class="mt-2"
+                    >
+                        <v-btn value="relevance" size="small">Relevance</v-btn>
+                        <v-btn value="date" size="small">Latest</v-btn>
+                    </v-btn-toggle>
                 </v-card>
 
                 <!-- PLAYER AREA (contained, not full-bleed) -->
@@ -305,6 +315,9 @@ export default {
                 color: "error",
             },
 
+            // search ORDER BY DATE
+            searchOrder: "relevance",
+
             // Floating window state
             isFloating: false,
             chatMode: false,
@@ -313,7 +326,6 @@ export default {
             aiTyping: false,
             codeSnippets: [
                 `import axios from "axios";
-
 export default {
     name: "EmployeeMonitor",
     data() {
@@ -513,13 +525,25 @@ console.log([1,2,3,4].filter(isEven));`,
         },
     },
     watch: {
-        searchQuery(newVal) {
-            if (!newVal || !newVal.trim()) {
+        searchQuery(newVal){
+            clearTimeout(this._searchDebounce);
+
+            if(!newVal || !newVal.trim()){
                 this.results = [];
                 this.nextPageToken = "";
+                return;
+            }
+            this._searchDebounce = setTimeout(() => {
+                this.searchVideos();
+            }, 500);
+        },
+        searchOrder(){
+            if(this.searchQuery && this.searchQuery.trim()){
+                this.searchVideos();
             }
         },
     },
+    
     methods: {
         showError(message) {
             this.snackbar.message = message;
@@ -554,6 +578,7 @@ console.log([1,2,3,4].filter(isEven));`,
                         part: "snippet",
                         type: "video",
                         maxResults: 10,
+                        order: this.searchOrder,
                         pageToken: loadMore ? this.nextPageToken : undefined,
                     },
                 });
@@ -859,6 +884,8 @@ console.log([1,2,3,4].filter(isEven));`,
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.3;
+    color: #f2f2f2;
+
 }
 
 /* ===== CHAT MODE OVERLAY ===== */
