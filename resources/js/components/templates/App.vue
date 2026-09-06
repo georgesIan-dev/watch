@@ -39,9 +39,9 @@ export default {
     data: () => ({
         drawer: false,
         navItems: [
-            { title: 'Home', path: '/', icon: 'mdi-home-variant' },
-            { title: 'Company', path: '/company', icon: 'mdi-domain' },
-            { title: 'Watch Party', path: '/watch-party', icon: 'mdi-youtube' },
+            // { title: 'Home', path: '/', icon: 'mdi-home-variant' },
+            // { title: 'Company', path: '/company', icon: 'mdi-domain' },
+            { title: 'Watch Party', path: '/', icon: 'mdi-youtube' },
         ],
     }),
 

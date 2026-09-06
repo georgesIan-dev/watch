@@ -7,9 +7,9 @@ const WatchParty = () => import('./components/pages/WatchParty.vue')
 const router = createRouter({
     history: createWebHistory(),
     routes: [
-        { path: '/', name: 'Home', component: Home },
-        { path: '/company', name: 'Company', component: Company },
-        { path: '/watch-party', name: 'WatchParty', component: WatchParty },
+        // { path: '/', name: 'Home', component: Home },
+        // { path: '/company', name: 'Company', component: Company },
+        { path: '/', name: 'WatchParty', component: WatchParty },
     ],
 })
 
