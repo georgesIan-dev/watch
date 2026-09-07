@@ -233,6 +233,56 @@
                     </v-card-text>
                 </v-card>
 
+                <!-- LIVE NOW -->
+                <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                    <v-card-text>
+                        <div class="d-flex align-center mb-2">
+                            <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
+                            <span class="text-subtitle-2 font-weight-bold">Live Now</span>
+                            <v-spacer />
+                            <v-btn icon="mdi-refresh" size="small" variant="text" @click="fetchLiveVideos" />
+                        </div>
+
+                        <div v-if="loadingLive" class="d-flex justify-center pa-4">
+                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                        </div>
+
+                        <div v-else-if="liveResults.length === 0" class="text-medium-emphasis">
+                            No live videos found right now.
+                        </div>
+
+                        <v-row v-else>
+                            <v-col
+                                v-for="video in liveResults"
+                                :key="video.videoId"
+                                cols="6"
+                                sm="4"
+                                md="3"
+                                lg="2"
+                            >
+                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
+                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-chip size="x-small" color="error" class="live-badge">LIVE</v-chip>
+                                        <v-btn
+                                            icon="mdi-plus"
+                                            size="x-small"
+                                            variant="flat"
+                                            color="surface"
+                                            class="grid-remove-btn"
+                                            title="Add to queue"
+                                            @click.stop="addToQueue(video)"
+                                        />
+                                    </v-img>
+                                    <div class="pa-2">
+                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
+                                        <div class="text-caption grid-channel">{{ video.channelTitle }}</div>
+                                    </div>
+                                </v-card>
+                            </v-col>
+                        </v-row>
+                    </v-card-text>
+                </v-card>
+
                 <!-- SEARCH RESULTS (grid) -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
@@ -292,11 +342,12 @@
 <script>
 import axios from "axios";
 
-// YouTube Data API v3 key, exposed to the client build via Vite.
-// Set VITE_YOUTUBE_API_KEY in your .env file (must be prefixed with VITE_
-// for Vite to expose it to the frontend).
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
-const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
+// YouTube requests now go through our own Laravel backend, which holds
+// the API keys server-side (config/services.php -> services.youtube.keys)
+// and rotates through them automatically on quota errors. No API key is
+// ever exposed to the browser.
+const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
+const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 
 export default {
     name: "WatchParty",
@@ -315,6 +366,8 @@ export default {
                 color: "error",
             },
 
+            liveResults: [],
+            loadingLive: false,
             // search ORDER BY DATE
             searchOrder: "relevance",
 
@@ -543,7 +596,7 @@ console.log([1,2,3,4].filter(isEven));`,
             }
         },
     },
-    
+
     methods: {
         showError(message) {
             this.snackbar.message = message;
@@ -551,16 +604,44 @@ console.log([1,2,3,4].filter(isEven));`,
             this.snackbar.show = true;
         },
 
+        // Thin wrapper around our own backend endpoints. Key rotation and
+        // quota handling now happen server-side in YoutubeController.
+        async youtubeRequest(endpoint, params) {
+            return axios.get(endpoint, { params });
+        },
+
+        async fetchLiveVideos() {
+            this.loadingLive = true;
+            try {
+                const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
+                    q: this.searchQuery || "live",
+                    maxResults: 12,
+                });
+
+                const items = response.data.items || [];
+                this.liveResults = items.map((item) => ({
+                    videoId: item.id.videoId,
+                    title: item.snippet.title,
+                    channelTitle: item.snippet.channelTitle,
+                    thumbnail:
+                        item.snippet.thumbnails?.medium?.url ||
+                        item.snippet.thumbnails?.default?.url,
+                }));
+            } catch (error) {
+                console.error("YouTube live search error:", error);
+                const message =
+                    error.response?.data?.message ||
+                    "Failed to fetch live videos from YouTube (all API keys may be exhausted)";
+                this.showError(message);
+            } finally {
+                this.loadingLive = false;
+            }
+        },
+
         async searchVideos(loadMore = false) {
             const query = (this.searchQuery || "").trim();
             if (!query) {
                 this.showError("Enter something to search for");
-                return;
-            }
-            if (!YOUTUBE_API_KEY) {
-                this.showError(
-                    "Missing YouTube API key. Set VITE_YOUTUBE_API_KEY in your .env file."
-                );
                 return;
             }
 
@@ -571,16 +652,11 @@ console.log([1,2,3,4].filter(isEven));`,
 
             this.loading = true;
             try {
-                const response = await axios.get(YOUTUBE_SEARCH_URL, {
-                    params: {
-                        key: YOUTUBE_API_KEY,
-                        q: query,
-                        part: "snippet",
-                        type: "video",
-                        maxResults: 10,
-                        order: this.searchOrder,
-                        pageToken: loadMore ? this.nextPageToken : undefined,
-                    },
+                const response = await this.youtubeRequest(YOUTUBE_SEARCH_ENDPOINT, {
+                    q: query,
+                    maxResults: 10,
+                    order: this.searchOrder,
+                    pageToken: loadMore ? this.nextPageToken : undefined,
                 });
 
                 const items = response.data.items || [];
@@ -598,8 +674,8 @@ console.log([1,2,3,4].filter(isEven));`,
             } catch (error) {
                 console.error("YouTube search error:", error);
                 const message =
-                    error.response?.data?.error?.message ||
-                    "Failed to fetch videos from YouTube";
+                    error.response?.data?.message ||
+                    "Failed to fetch videos from YouTube (all API keys may be exhausted)";
                 this.showError(message);
             } finally {
                 this.loading = false;
@@ -728,6 +804,10 @@ console.log([1,2,3,4].filter(isEven));`,
         },
     },
 
+    mounted() {
+        this.fetchLiveVideos();
+    },
+
     beforeUnmount() {
         window.removeEventListener("mousemove", this.onDrag);
         window.removeEventListener("mouseup", this.stopDrag);
@@ -769,14 +849,12 @@ console.log([1,2,3,4].filter(isEven));`,
     min-width: 240px;
     min-height: 160px;
 }
-
-/* .player-reserve {
-    width: 100%;
-    max-width: 900px;
-    aspect-ratio: 16 / 9;
-    max-height: 480px;
-    margin: 0 auto;
-} */
+.live-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-weight: 700;
+}
 .player-reserve {
     display: none;
 }
