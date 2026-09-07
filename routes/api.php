@@ -1,5 +1,5 @@
 <?php
-use App\Http\Controllers\YoutubeController;
+use App\Http\Controllers\Youtubecontroller;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Route;
 | is assigned the "api" middleware group. Enjoy building your API!
 |
 */
-Route::get('/youtube/search', [YoutubeController::class, 'search']);
-Route::get('/youtube/live', [YoutubeController::class, 'live']);
+Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
+Route::get('/youtube/live', [Youtubecontroller::class, 'live']);
 
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
