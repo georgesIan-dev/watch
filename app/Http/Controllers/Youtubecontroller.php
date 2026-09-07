@@ -19,34 +19,50 @@ class Youtubecontroller extends Controller
     private function youtubeRequest(array $params): array
     {
         $keys = $this->getApiKeys();
-        
-        foreach ($keys as $key) {
-            // DITO NATIN NILAGAY ANG FIX PARA SA TIMEOUT AT IPV4
+        $lastError = 'No API keys available.';
+        $lastStatus = 500;
+
+        foreach ($keys as $index => $key) {
             $response = Http::withOptions([
-                'force_ip_resolve' => 'v4', // Force IPv4
-                'verify' => false,          // Ignore SSL muna
+                'force_ip_resolve' => 'v4',
+                'verify' => false,
             ])
-            ->timeout(60) 
+            ->timeout(30)
             ->get(self::SEARCH_URL, array_merge($params, [
                 'key' => $key,
             ]));
 
             if ($response->successful()) {
-                return ['ok' => true, 'data' => $response->json()];
+                return [
+                    'ok' => true,
+                    'data' => $response->json(),
+                ];
             }
 
             $body = $response->json();
             $reason = $body['error']['errors'][0]['reason'] ?? null;
-            if ($response->status() === 403 && in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'])) {
-                continue; // Lipat sa susunod na key
+            
+            $lastError = $body['error']['message'] ?? 'Unknown Error';
+            $lastStatus = $response->status();
+
+            // Kung quota error, huwag munang mag-return. Ituloy ang loop sa susunod na key.
+            if ($lastStatus === 403 && in_array($reason, ['quotaExceeded', 'dailyLimitExceeded', 'userRateLimitExceeded'])) {
+                continue; 
             }
-            break;
+
+            // Kung hindi quota error (halimbawa: invalid key), i-return na agad para malaman mo.
+            return [
+                'ok' => false,
+                'status' => $lastStatus,
+                'error' => $lastError,
+            ];
         }
 
+        // Kapag nakarating dito, ibig sabihin LAHAT ng keys ay sinubukan at LAHAT sila ay Quota Exceeded.
         return [
             'ok' => false,
-            'status' => $response->status() ?? 500,
-            'error' => $body['error']['message'] ?? 'Connection Failed.'
+            'status' => $lastStatus,
+            'error' => "All API keys exhausted: " . $lastError,
         ];
     }
 

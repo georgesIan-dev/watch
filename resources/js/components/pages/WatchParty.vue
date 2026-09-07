@@ -611,39 +611,32 @@ console.log([1,2,3,4].filter(isEven));`,
         },
 
         async fetchLiveVideos() {
-            this.loadingLive = true;
-            try {
-                const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
-                    q: this.searchQuery || "live",
-                    maxResults: 12,
-                });
+    this.loadingLive = true;
+    try {
+        const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
+            q: this.searchQuery || "live",
+            maxResults: 12,
+        });
 
-                const items = response.data.items || [];
-                this.liveResults = items.map((item) => ({
-                    videoId: item.id.videoId,
-                    title: item.snippet.title,
-                    channelTitle: item.snippet.channelTitle,
-                    thumbnail:
-                        item.snippet.thumbnails?.medium?.url ||
-                        item.snippet.thumbnails?.default?.url,
-                }));
-            } catch (error) {
-                console.error("YouTube live search error:", error);
-                const message =
-                    error.response?.data?.message ||
-                    "Failed to fetch live videos from YouTube (all API keys may be exhausted)";
-                this.showError(message);
-            } finally {
-                this.loadingLive = false;
-            }
+        const items = response.data.items || [];
+        this.liveResults = items.map((item) => ({
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            channelTitle: item.snippet.channelTitle,
+            thumbnail: item.snippet.thumbnails?.medium?.url,
+        }));
+    } catch (error) {
+        // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
+        // para hindi ma-distract ang user kung search naman ang habol nila.
+        console.warn("Live videos failed silently (probably quota)");
+    } finally {
+        this.loadingLive = false;
+    }
         },
 
         async searchVideos(loadMore = false) {
             const query = (this.searchQuery || "").trim();
-            if (!query) {
-                this.showError("Enter something to search for");
-                return;
-            }
+            if (!query) return;
 
             if (!loadMore) {
                 this.results = [];
@@ -664,19 +657,21 @@ console.log([1,2,3,4].filter(isEven));`,
                     videoId: item.id.videoId,
                     title: item.snippet.title,
                     channelTitle: item.snippet.channelTitle,
-                    thumbnail:
-                        item.snippet.thumbnails?.medium?.url ||
-                        item.snippet.thumbnails?.default?.url,
+                    thumbnail: item.snippet.thumbnails?.medium?.url,
                 }));
 
                 this.results = loadMore ? [...this.results, ...mapped] : mapped;
                 this.nextPageToken = response.data.nextPageToken || "";
             } catch (error) {
-                console.error("YouTube search error:", error);
-                const message =
-                    error.response?.data?.message ||
-                    "Failed to fetch videos from YouTube (all API keys may be exhausted)";
-                this.showError(message);
+                // KUNG MAY RESULTA NA, huwag nang ipakita ang error snackbar
+                if (this.results.length > 0) {
+                    console.error("Next page load failed, but we have existing results.");
+                } else {
+                    // Ipakita lang ang error kung talagang blanko ang screen
+                    console.error("YouTube search error:", error);
+                    const message = error.response?.data?.message || "All API keys exhausted. Try again later.";
+                    this.showError(message);
+                }
             } finally {
                 this.loading = false;
             }
