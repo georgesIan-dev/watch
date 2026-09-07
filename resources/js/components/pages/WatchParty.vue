@@ -609,7 +609,7 @@ console.log([1,2,3,4].filter(isEven));`,
         async youtubeRequest(endpoint, params) {
             return axios.get(endpoint, { params });
         },
-
+//
         async fetchLiveVideos() {
             this.loadingLive = true;
             try {
