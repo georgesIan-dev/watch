@@ -233,56 +233,6 @@
                     </v-card-text>
                 </v-card>
 
-                <!-- LIVE NOW -->
-                <v-card variant="flat" color="surface-bright" class="mt-4 border">
-                    <v-card-text>
-                        <div class="d-flex align-center mb-2">
-                            <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
-                            <span class="text-subtitle-2 font-weight-bold">Live Now</span>
-                            <v-spacer />
-                            <v-btn icon="mdi-refresh" size="small" variant="text" @click="fetchLiveVideos" />
-                        </div>
-
-                        <div v-if="loadingLive" class="d-flex justify-center pa-4">
-                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                        </div>
-
-                        <div v-else-if="liveResults.length === 0" class="text-medium-emphasis">
-                            No live videos found right now.
-                        </div>
-
-                        <v-row v-else>
-                            <v-col
-                                v-for="video in liveResults"
-                                :key="video.videoId"
-                                cols="6"
-                                sm="4"
-                                md="3"
-                                lg="2"
-                            >
-                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
-                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
-                                        <v-chip size="x-small" color="error" class="live-badge">LIVE</v-chip>
-                                        <v-btn
-                                            icon="mdi-plus"
-                                            size="x-small"
-                                            variant="flat"
-                                            color="surface"
-                                            class="grid-remove-btn"
-                                            title="Add to queue"
-                                            @click.stop="addToQueue(video)"
-                                        />
-                                    </v-img>
-                                    <div class="pa-2">
-                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
-                                        <div class="text-caption grid-channel">{{ video.channelTitle }}</div>
-                                    </div>
-                                </v-card>
-                            </v-col>
-                        </v-row>
-                    </v-card-text>
-                </v-card>
-
                 <!-- SEARCH RESULTS (grid) -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
@@ -309,6 +259,13 @@
                             >
                                 <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
                                     <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-icon
+                                            v-if="video.isLive"
+                                            color="error"
+                                            size="12"
+                                            class="live-dot"
+                                            title="Live"
+                                        >mdi-circle</v-icon>
                                         <v-btn
                                             icon="mdi-plus"
                                             size="x-small"
@@ -347,7 +304,6 @@ import axios from "axios";
 // and rotates through them automatically on quota errors. No API key is
 // ever exposed to the browser.
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
-const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 
 export default {
     name: "WatchParty",
@@ -366,8 +322,6 @@ export default {
                 color: "error",
             },
 
-            liveResults: [],
-            loadingLive: false,
             // search ORDER BY DATE
             searchOrder: "relevance",
 
@@ -609,30 +563,6 @@ console.log([1,2,3,4].filter(isEven));`,
         async youtubeRequest(endpoint, params) {
             return axios.get(endpoint, { params });
         },
-//
-        async fetchLiveVideos() {
-            this.loadingLive = true;
-            try {
-                const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
-                    q: this.searchQuery || "live",
-                    maxResults: 4,
-                });
-
-                const items = response.data.items || [];
-                this.liveResults = items.map((item) => ({
-                    videoId: item.id.videoId,
-                    title: item.snippet.title,
-                    channelTitle: item.snippet.channelTitle,
-                    thumbnail: item.snippet.thumbnails?.medium?.url,
-                }));
-            } catch (error) {
-                // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
-                // para hindi ma-distract ang user kung search naman ang habol nila.
-                console.warn("Live videos failed silently (probably quota)");
-            } finally {
-                this.loadingLive = false;
-            }
-        },
 
         async searchVideos(loadMore = false) {
             const query = (this.searchQuery || "").trim();
@@ -657,6 +587,7 @@ console.log([1,2,3,4].filter(isEven));`,
                     title: item.snippet.title,
                     channelTitle: item.snippet.channelTitle,
                     thumbnail: item.snippet.thumbnails?.medium?.url,
+                    isLive: item.snippet.liveBroadcastContent === "live",
                 }));
 
                 if (!loadMore) {
@@ -701,7 +632,7 @@ console.log([1,2,3,4].filter(isEven));`,
             const video = this.queue[index];
             if (video) {
                 this.playVideo(video);
-                // this.queue.splice(index, 1);
+                this.queue.splice(index, 1);
             }
         },
 
@@ -805,10 +736,6 @@ console.log([1,2,3,4].filter(isEven));`,
         },
     },
 
-    mounted() {
-        this.fetchLiveVideos();
-    },
-
     beforeUnmount() {
         window.removeEventListener("mousemove", this.onDrag);
         window.removeEventListener("mouseup", this.stopDrag);
@@ -850,11 +777,11 @@ console.log([1,2,3,4].filter(isEven));`,
     min-width: 240px;
     min-height: 160px;
 }
-.live-badge {
+.live-dot {
     position: absolute;
-    top: 4px;
-    left: 4px;
-    font-weight: 700;
+    top: 6px;
+    left: 6px;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
 .player-reserve {
     display: none;
