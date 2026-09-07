@@ -611,27 +611,27 @@ console.log([1,2,3,4].filter(isEven));`,
         },
 
         async fetchLiveVideos() {
-    this.loadingLive = true;
-    try {
-        const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
-            q: this.searchQuery || "live",
-            maxResults: 12,
-        });
+            this.loadingLive = true;
+            try {
+                const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
+                    q: this.searchQuery || "live",
+                    maxResults: 4,
+                });
 
-        const items = response.data.items || [];
-        this.liveResults = items.map((item) => ({
-            videoId: item.id.videoId,
-            title: item.snippet.title,
-            channelTitle: item.snippet.channelTitle,
-            thumbnail: item.snippet.thumbnails?.medium?.url,
-        }));
-    } catch (error) {
-        // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
-        // para hindi ma-distract ang user kung search naman ang habol nila.
-        console.warn("Live videos failed silently (probably quota)");
-    } finally {
-        this.loadingLive = false;
-    }
+                const items = response.data.items || [];
+                this.liveResults = items.map((item) => ({
+                    videoId: item.id.videoId,
+                    title: item.snippet.title,
+                    channelTitle: item.snippet.channelTitle,
+                    thumbnail: item.snippet.thumbnails?.medium?.url,
+                }));
+            } catch (error) {
+                // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
+                // para hindi ma-distract ang user kung search naman ang habol nila.
+                console.warn("Live videos failed silently (probably quota)");
+            } finally {
+                this.loadingLive = false;
+            }
         },
 
         async searchVideos(loadMore = false) {
@@ -639,11 +639,10 @@ console.log([1,2,3,4].filter(isEven));`,
             if (!query) return;
 
             if (!loadMore) {
-                this.results = [];
-                this.nextPageToken = "";
+                // Huwag muna i-clear ang results para hindi "kumukurap" ang screen
+                this.loading = true; 
             }
 
-            this.loading = true;
             try {
                 const response = await this.youtubeRequest(YOUTUBE_SEARCH_ENDPOINT, {
                     q: query,
@@ -660,17 +659,24 @@ console.log([1,2,3,4].filter(isEven));`,
                     thumbnail: item.snippet.thumbnails?.medium?.url,
                 }));
 
-                this.results = loadMore ? [...this.results, ...mapped] : mapped;
-                this.nextPageToken = response.data.nextPageToken || "";
-            } catch (error) {
-                // KUNG MAY RESULTA NA, huwag nang ipakita ang error snackbar
-                if (this.results.length > 0) {
-                    console.error("Next page load failed, but we have existing results.");
+                if (!loadMore) {
+                    this.results = mapped; // Dito lang natin palitan ang results
                 } else {
-                    // Ipakita lang ang error kung talagang blanko ang screen
-                    console.error("YouTube search error:", error);
-                    const message = error.response?.data?.message || "All API keys exhausted. Try again later.";
-                    this.showError(message);
+                    this.results = [...this.results, ...mapped];
+                }
+                this.nextPageToken = response.data.nextPageToken || "";
+
+            } catch (error) {
+                console.error("Search Error:", error);
+
+                // --- ETO ANG LOGIC NA GUSTO MO ---
+                // Ipakita lang ang Error Snackbar KUNG walang laman ang results.
+                // Kung may results naman, itago lang ang error (silent fail).
+                if (this.results.length === 0) {
+                    const msg = error.response?.data?.message || "Quota exceeded. Try again later.";
+                    this.showError(msg);
+                } else {
+                    console.warn("Quota reached for next results, but keeping current view.");
                 }
             } finally {
                 this.loading = false;
