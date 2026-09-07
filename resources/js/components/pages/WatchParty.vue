@@ -701,7 +701,7 @@ console.log([1,2,3,4].filter(isEven));`,
             const video = this.queue[index];
             if (video) {
                 this.playVideo(video);
-                this.queue.splice(index, 1);
+                // this.queue.splice(index, 1);
             }
         },
 
