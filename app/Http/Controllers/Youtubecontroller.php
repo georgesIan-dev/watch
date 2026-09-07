@@ -83,11 +83,24 @@ class Youtubecontroller extends Controller
 
     public function live(Request $request): JsonResponse
     {
+        $query = trim((string) ($request->q ?? ''));
+
+        // Huwag munang tumawag sa YouTube API kung walang salitang "live"
+        // sa search query, para hindi mabilis maubos ang quota.
+        if (!str_contains(strtolower($query), 'live')) {
+            return response()->json([
+                'items' => [],
+                'kind' => 'youtube#searchListResponse',
+                'skipped' => true,
+                'reason' => 'No "live" keyword in query, API call skipped to save quota.',
+            ]);
+        }
+
         $result = $this->youtubeRequest([
             'part' => 'snippet',
             'type' => 'video',
             'eventType' => 'live',
-            'q' => $request->q ?? 'live',
+            'q' => $query ?: 'live',
             'maxResults' => 12,
         ]);
 
