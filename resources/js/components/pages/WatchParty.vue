@@ -23,14 +23,7 @@
             </div>
 
             <div class="player-frame-wrap">
-                <iframe
-                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                    title="YouTube video player"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen
-                    class="player-frame"
-                ></iframe>
+                <div id="yt-player-mount" class="player-frame"></div>
 
                 <v-btn
                     v-if="!isFloating"
@@ -198,8 +191,17 @@
                 <!-- QUEUE -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
-                        <div class="text-subtitle-2 font-weight-bold mb-2">
-                            Queue ({{ queue.length }})
+                        <div class="d-flex align-center mb-2">
+                            <span class="text-subtitle-2 font-weight-bold">Queue ({{ queue.length }})</span>
+                            <v-spacer />
+                            <v-switch
+                                v-model="autoPlayEnabled"
+                                label="Auto-play"
+                                color="primary"
+                                density="compact"
+                                hide-details
+                                class="flex-grow-0"
+                            />
                         </div>
                         <div v-if="queue.length === 0" class="text-medium-emphasis">
                             No videos queued yet. Add videos from the search results.
@@ -314,6 +316,8 @@ export default {
             queue: [],
             currentVideoId: "",
             currentVideoTitle: "",
+            ytPlayer: null,
+            autoPlayEnabled: true,
             loading: false,
             nextPageToken: "",
             snackbar: {
@@ -570,7 +574,6 @@ console.log([1,2,3,4].filter(isEven));`,
 
             if (!loadMore) {
                 // Huwag muna i-clear ang results para hindi "kumukurap" ang screen
-                //
                 this.loading = true; 
             }
 
@@ -618,6 +621,66 @@ console.log([1,2,3,4].filter(isEven));`,
         playVideo(video) {
             this.currentVideoId = video.videoId;
             this.currentVideoTitle = video.title;
+            this.loadOrCueVideo(video.videoId);
+        },
+
+        // Play next queued video automatically kapag tapos na yung kasalukuyan
+        // — pero lang kapag naka-ON ang autoPlayEnabled toggle.
+        playNextInQueue() {
+            if (!this.autoPlayEnabled) {
+                return;
+            }
+            if (this.queue.length > 0) {
+                const next = this.queue[0];
+                this.queue.splice(0, 1);
+                this.playVideo(next);
+            } else {
+                this.currentVideoId = "";
+                this.currentVideoTitle = "";
+            }
+        },
+
+        ensureYouTubeApi() {
+            return new Promise((resolve) => {
+                if (window.YT && window.YT.Player) {
+                    resolve(window.YT);
+                    return;
+                }
+                const existing = document.getElementById("yt-iframe-api");
+                if (!existing) {
+                    const tag = document.createElement("script");
+                    tag.id = "yt-iframe-api";
+                    tag.src = "https://www.youtube.com/iframe_api";
+                    document.head.appendChild(tag);
+                }
+                const prevCallback = window.onYouTubeIframeAPIReady;
+                window.onYouTubeIframeAPIReady = () => {
+                    if (typeof prevCallback === "function") prevCallback();
+                    resolve(window.YT);
+                };
+            });
+        },
+
+        async loadOrCueVideo(videoId) {
+            await this.$nextTick();
+            const YT = await this.ensureYouTubeApi();
+
+            if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === "function") {
+                this.ytPlayer.loadVideoById(videoId);
+                return;
+            }
+
+            this.ytPlayer = new YT.Player("yt-player-mount", {
+                videoId,
+                playerVars: { autoplay: 1, rel: 0 },
+                events: {
+                    onStateChange: (event) => {
+                        if (event.data === YT.PlayerState.ENDED) {
+                            this.playNextInQueue();
+                        }
+                    },
+                },
+            });
         },
 
         addToQueue(video) {
@@ -632,8 +695,8 @@ console.log([1,2,3,4].filter(isEven));`,
         playFromQueue(index) {
             const video = this.queue[index];
             if (video) {
-                this.playVideo(video);
                 this.queue.splice(index, 1);
+                this.playVideo(video);
             }
         },
 
