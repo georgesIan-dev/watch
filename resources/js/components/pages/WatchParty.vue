@@ -570,6 +570,7 @@ console.log([1,2,3,4].filter(isEven));`,
 
             if (!loadMore) {
                 // Huwag muna i-clear ang results para hindi "kumukurap" ang screen
+                //
                 this.loading = true; 
             }
 
