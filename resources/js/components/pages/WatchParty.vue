@@ -234,7 +234,7 @@
                 </v-card>
 
                 <!-- LIVE NOW -->
-                <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                <!-- <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
                         <div class="d-flex align-center mb-2">
                             <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
@@ -281,7 +281,7 @@
                             </v-col>
                         </v-row>
                     </v-card-text>
-                </v-card>
+                </v-card> -->
 
                 <!-- SEARCH RESULTS (grid) -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
@@ -712,7 +712,7 @@ console.log([1,2,3,4].filter(isEven));`,
         //     this.isFloating = true;
         //     this.chatMode = true;
         // },
-        
+
         openFloating() {
             this.floatPos = {
                 x: Math.max(16, window.innerWidth - this.floatSize.w - 24),
