@@ -23,7 +23,14 @@
             </div>
 
             <div class="player-frame-wrap">
-                <div id="yt-player-mount" class="player-frame"></div>
+                <iframe
+                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                    title="YouTube video player"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    class="player-frame"
+                ></iframe>
 
                 <v-btn
                     v-if="!isFloating"
@@ -191,17 +198,8 @@
                 <!-- QUEUE -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
-                        <div class="d-flex align-center mb-2">
-                            <span class="text-subtitle-2 font-weight-bold">Queue ({{ queue.length }})</span>
-                            <v-spacer />
-                            <v-switch
-                                v-model="autoPlayEnabled"
-                                label="Auto-play"
-                                color="primary"
-                                density="compact"
-                                hide-details
-                                class="flex-grow-0"
-                            />
+                        <div class="text-subtitle-2 font-weight-bold mb-2">
+                            Queue ({{ queue.length }})
                         </div>
                         <div v-if="queue.length === 0" class="text-medium-emphasis">
                             No videos queued yet. Add videos from the search results.
@@ -235,6 +233,56 @@
                     </v-card-text>
                 </v-card>
 
+                <!-- LIVE NOW -->
+                <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                    <v-card-text>
+                        <div class="d-flex align-center mb-2">
+                            <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
+                            <span class="text-subtitle-2 font-weight-bold">Live Now</span>
+                            <v-spacer />
+                            <v-btn icon="mdi-refresh" size="small" variant="text" @click="fetchLiveVideos" />
+                        </div>
+
+                        <div v-if="loadingLive" class="d-flex justify-center pa-4">
+                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                        </div>
+
+                        <div v-else-if="liveResults.length === 0" class="text-medium-emphasis">
+                            No live videos found right now.
+                        </div>
+
+                        <v-row v-else>
+                            <v-col
+                                v-for="video in liveResults"
+                                :key="video.videoId"
+                                cols="6"
+                                sm="4"
+                                md="3"
+                                lg="2"
+                            >
+                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
+                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-chip size="x-small" color="error" class="live-badge">LIVE</v-chip>
+                                        <v-btn
+                                            icon="mdi-plus"
+                                            size="x-small"
+                                            variant="flat"
+                                            color="surface"
+                                            class="grid-remove-btn"
+                                            title="Add to queue"
+                                            @click.stop="addToQueue(video)"
+                                        />
+                                    </v-img>
+                                    <div class="pa-2">
+                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
+                                        <div class="text-caption grid-channel">{{ video.channelTitle }}</div>
+                                    </div>
+                                </v-card>
+                            </v-col>
+                        </v-row>
+                    </v-card-text>
+                </v-card>
+
                 <!-- SEARCH RESULTS (grid) -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
@@ -261,13 +309,6 @@
                             >
                                 <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
                                     <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
-                                        <v-icon
-                                            v-if="video.isLive"
-                                            color="error"
-                                            size="12"
-                                            class="live-dot"
-                                            title="Live"
-                                        >mdi-circle</v-icon>
                                         <v-btn
                                             icon="mdi-plus"
                                             size="x-small"
@@ -306,6 +347,7 @@ import axios from "axios";
 // and rotates through them automatically on quota errors. No API key is
 // ever exposed to the browser.
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
+const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 
 export default {
     name: "WatchParty",
@@ -316,8 +358,6 @@ export default {
             queue: [],
             currentVideoId: "",
             currentVideoTitle: "",
-            ytPlayer: null,
-            autoPlayEnabled: true,
             loading: false,
             nextPageToken: "",
             snackbar: {
@@ -326,6 +366,8 @@ export default {
                 color: "error",
             },
 
+            liveResults: [],
+            loadingLive: false,
             // search ORDER BY DATE
             searchOrder: "relevance",
 
@@ -568,6 +610,30 @@ console.log([1,2,3,4].filter(isEven));`,
             return axios.get(endpoint, { params });
         },
 
+        async fetchLiveVideos() {
+            this.loadingLive = true;
+            try {
+                const response = await this.youtubeRequest(YOUTUBE_LIVE_ENDPOINT, {
+                    q: this.searchQuery || "live",
+                    maxResults: 4,
+                });
+
+                const items = response.data.items || [];
+                this.liveResults = items.map((item) => ({
+                    videoId: item.id.videoId,
+                    title: item.snippet.title,
+                    channelTitle: item.snippet.channelTitle,
+                    thumbnail: item.snippet.thumbnails?.medium?.url,
+                }));
+            } catch (error) {
+                // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
+                // para hindi ma-distract ang user kung search naman ang habol nila.
+                console.warn("Live videos failed silently (probably quota)");
+            } finally {
+                this.loadingLive = false;
+            }
+        },
+
         async searchVideos(loadMore = false) {
             const query = (this.searchQuery || "").trim();
             if (!query) return;
@@ -591,7 +657,6 @@ console.log([1,2,3,4].filter(isEven));`,
                     title: item.snippet.title,
                     channelTitle: item.snippet.channelTitle,
                     thumbnail: item.snippet.thumbnails?.medium?.url,
-                    isLive: item.snippet.liveBroadcastContent === "live",
                 }));
 
                 if (!loadMore) {
@@ -621,66 +686,6 @@ console.log([1,2,3,4].filter(isEven));`,
         playVideo(video) {
             this.currentVideoId = video.videoId;
             this.currentVideoTitle = video.title;
-            this.loadOrCueVideo(video.videoId);
-        },
-
-        // Play next queued video automatically kapag tapos na yung kasalukuyan
-        // — pero lang kapag naka-ON ang autoPlayEnabled toggle.
-        playNextInQueue() {
-            if (!this.autoPlayEnabled) {
-                return;
-            }
-            if (this.queue.length > 0) {
-                const next = this.queue[0];
-                this.queue.splice(0, 1);
-                this.playVideo(next);
-            } else {
-                this.currentVideoId = "";
-                this.currentVideoTitle = "";
-            }
-        },
-
-        ensureYouTubeApi() {
-            return new Promise((resolve) => {
-                if (window.YT && window.YT.Player) {
-                    resolve(window.YT);
-                    return;
-                }
-                const existing = document.getElementById("yt-iframe-api");
-                if (!existing) {
-                    const tag = document.createElement("script");
-                    tag.id = "yt-iframe-api";
-                    tag.src = "https://www.youtube.com/iframe_api";
-                    document.head.appendChild(tag);
-                }
-                const prevCallback = window.onYouTubeIframeAPIReady;
-                window.onYouTubeIframeAPIReady = () => {
-                    if (typeof prevCallback === "function") prevCallback();
-                    resolve(window.YT);
-                };
-            });
-        },
-
-        async loadOrCueVideo(videoId) {
-            await this.$nextTick();
-            const YT = await this.ensureYouTubeApi();
-
-            if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === "function") {
-                this.ytPlayer.loadVideoById(videoId);
-                return;
-            }
-
-            this.ytPlayer = new YT.Player("yt-player-mount", {
-                videoId,
-                playerVars: { autoplay: 1, rel: 0 },
-                events: {
-                    onStateChange: (event) => {
-                        if (event.data === YT.PlayerState.ENDED) {
-                            this.playNextInQueue();
-                        }
-                    },
-                },
-            });
         },
 
         addToQueue(video) {
@@ -695,11 +700,19 @@ console.log([1,2,3,4].filter(isEven));`,
         playFromQueue(index) {
             const video = this.queue[index];
             if (video) {
-                this.queue.splice(index, 1);
                 this.playVideo(video);
+                this.queue.splice(index, 1);
             }
         },
-
+///        openFloating() {
+        //     this.floatPos = {
+        //         x: Math.max(16, window.innerWidth - this.floatSize.w - 24),
+        //         y: Math.max(16, window.innerHeight - this.floatSize.h - 24),
+        //     };
+        //     this.isFloating = true;
+        //     this.chatMode = true;
+        // },
+        
         openFloating() {
             this.floatPos = {
                 x: Math.max(16, window.innerWidth - this.floatSize.w - 24),
@@ -800,6 +813,10 @@ console.log([1,2,3,4].filter(isEven));`,
         },
     },
 
+    mounted() {
+        this.fetchLiveVideos();
+    },
+
     beforeUnmount() {
         window.removeEventListener("mousemove", this.onDrag);
         window.removeEventListener("mouseup", this.stopDrag);
@@ -841,11 +858,11 @@ console.log([1,2,3,4].filter(isEven));`,
     min-width: 240px;
     min-height: 160px;
 }
-.live-dot {
+.live-badge {
     position: absolute;
-    top: 6px;
-    left: 6px;
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+    top: 4px;
+    left: 4px;
+    font-weight: 700;
 }
 .player-reserve {
     display: none;
