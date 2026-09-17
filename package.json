@@ -2,7 +2,8 @@
     "private": true,
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "postbuild": "node copy-pwa-files.js"
     },
     "devDependencies": {
         "@mdi/font": "^7.4.47",
