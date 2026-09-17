@@ -31,6 +31,13 @@ import App from './components/templates/App.vue'
 import router from './router.js'
 import vuetify from './plugins/vuetify.js'
 
+// PWA service worker registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(console.error)
+    })
+}
+
 createApp(App)
     .use(createPinia())
     .use(vuetify)
