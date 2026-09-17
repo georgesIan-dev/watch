@@ -1,7 +1,7 @@
 <template>
     <v-app>
         <v-app-bar elevation="0" color="surface" height="64" class="px-2 border-b">
-            <v-app-bar-nav-icon @click.stop="drawer = !drawer" />
+            <!-- <v-app-bar-nav-icon @click.stop="drawer = !drawer" /> -->
 
             <v-icon icon="mdi-monitor-eye" color="primary" class="mx-2" />
             <span class="text-subtitle-1 font-weight-bold">Monitoring System</span>
@@ -11,7 +11,7 @@
             <v-btn icon="mdi-logout-variant" variant="text" @click="logout" />
         </v-app-bar>
 
-        <v-navigation-drawer v-model="drawer" temporary color="surface" width="260">
+        <!-- <v-navigation-drawer v-model="drawer" temporary color="surface" width="260">
             <v-list nav class="pa-2">
                 <v-list-item
                     v-for="item in navItems"
@@ -24,7 +24,7 @@
                     class="mb-1"
                 />
             </v-list>
-        </v-navigation-drawer>
+        </v-navigation-drawer> -->
 
         <v-main>
             <router-view />
