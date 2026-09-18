@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Route;
 */
 Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
 Route::get('/youtube/live', [Youtubecontroller::class, 'live']);
+Route::get('/youtube/video', [YoutubeController::class, 'details']);
 
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {

@@ -195,6 +195,50 @@
                     </v-col>
                 </v-row>
 
+                <!-- SEE MORE -->
+                <v-card v-if="currentVideoId" variant="flat" color="surface-bright" class="mt-2 border player-card mx-auto" style="max-width: 900px;">
+                    <v-card-text>
+                        <div v-if="loadingDetails" class="text-medium-emphasis">Loading details...</div>
+
+                        <div v-else-if="videoDetails">
+                            <div class="d-flex align-center ga-3 mb-2 flex-wrap">
+                                <span class="text-caption text-medium-emphasis">
+                                    {{ formatCount(videoDetails.viewCount) }} views
+                                </span>
+                                <span class="text-caption text-medium-emphasis">•</span>
+                                <span class="text-caption text-medium-emphasis">
+                                    Uploaded {{ formatDate(videoDetails.publishedAt) }}
+                                </span>
+                                <span class="text-caption text-medium-emphasis">•</span>
+                                <span class="text-caption text-medium-emphasis">
+                                    {{ formatCount(videoDetails.likeCount) }} likes
+                                </span>
+                            </div>
+
+                            <div class="text-subtitle-2 font-weight-medium mb-1">{{ videoDetails.channelTitle }}</div>
+
+                            <div
+                                class="text-body-2"
+                                :class="{ 'description-clamped': !showDescription }"
+                                style="white-space: pre-line;"
+                            >
+                                {{ videoDetails.description }}
+                            </div>
+
+                            <v-btn
+                                v-if="videoDetails.description && videoDetails.description.length > 150"
+                                size="small"
+                                variant="text"
+                                class="mt-1 pa-0"
+                                @click="showDescription = !showDescription"
+                            >
+                                {{ showDescription ? 'Show less' : 'See more' }}
+                            </v-btn>
+                        </div>
+                    </v-card-text>
+                </v-card>
+
+
                 <!-- QUEUE -->
                 <v-card variant="flat" color="surface-bright" class="mt-4 border">
                     <v-card-text>
@@ -341,11 +385,6 @@
 
 <script>
 import axios from "axios";
-
-// YouTube requests now go through our own Laravel backend, which holds
-// the API keys server-side (config/services.php -> services.youtube.keys)
-// and rotates through them automatically on quota errors. No API key is
-// ever exposed to the browser.
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
 const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 
@@ -365,6 +404,11 @@ export default {
                 message: "",
                 color: "error",
             },
+
+            // for video details
+            videoDetails: null,
+            loadingDetails: false,
+            showDescription: false,
 
             liveResults: [],
             loadingLive: false,
@@ -603,7 +647,43 @@ console.log([1,2,3,4].filter(isEven));`,
             this.snackbar.color = "error";
             this.snackbar.show = true;
         },
+    async fetchVideoDetails(videoId) {
+            this.videoDetails = null;
+            this.loadingDetails = true;
+            try {
+                const response = await axios.get("/api/youtube/video", { params: { id: videoId } });
+                const item = response.data.items?.[0];
+                if (item) {
+                    this.videoDetails = {
+                        title: item.snippet.title,
+                        description: item.snippet.description,
+                        channelTitle: item.snippet.channelTitle,
+                        publishedAt: item.snippet.publishedAt,
+                        viewCount: item.statistics?.viewCount,
+                        likeCount: item.statistics?.likeCount,
+                    };
+                }
+            } catch (error) {
+                console.warn("Failed to fetch video details", error);
+            } finally {
+                this.loadingDetails = false;
+            }
+    },
 
+    formatDate(dateStr) {
+        if (!dateStr) return "";
+        return new Date(dateStr).toLocaleDateString("en-US", {
+            year: "numeric", month: "long", day: "numeric",
+        });
+    },
+
+    formatCount(num) {
+        if (!num) return "0";
+        num = parseInt(num, 10);
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+        if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+        return num.toString();
+    },
         // Thin wrapper around our own backend endpoints. Key rotation and
         // quota handling now happen server-side in YoutubeController.
         async youtubeRequest(endpoint, params) {
@@ -686,6 +766,8 @@ console.log([1,2,3,4].filter(isEven));`,
         playVideo(video) {
             this.currentVideoId = video.videoId;
             this.currentVideoTitle = video.title;
+            this.fetchVideoDetails(video.videoId);
+
         },
 
         addToQueue(video) {
@@ -702,6 +784,8 @@ console.log([1,2,3,4].filter(isEven));`,
             if (video) {
                 this.playVideo(video);
                 this.queue.splice(index, 1);
+                this.fetchVideoDetails(video.videoId);
+
             }
         },
 ///        openFloating() {
@@ -1197,5 +1281,11 @@ console.log([1,2,3,4].filter(isEven));`,
     font-size: 0.85rem;
     color: #d4d4d4;
     cursor: default;
+}
+.description-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 </style>

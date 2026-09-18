@@ -109,4 +109,32 @@ class Youtubecontroller extends Controller
         }
         return response()->json($result['data']);
     }
+
+    public function details(Request $request)
+{
+    $request->validate(['id' => 'required|string']);
+
+    $keys = config('services.youtube.keys', []);
+
+    foreach ($keys as $key) {
+        $response = Http::get('https://www.googleapis.com/youtube/v3/videos', [
+            'key' => $key,
+            'id' => $request->id,
+            'part' => 'snippet,statistics,contentDetails',
+        ]);
+
+        if ($response->successful()) {
+            return response()->json($response->json());
+        }
+
+        // Try next key kung quota-related error
+        if ($response->status() === 403) {
+            continue;
+        }
+
+        return response()->json(['message' => 'Failed to fetch video details'], $response->status());
+    }
+
+    return response()->json(['message' => 'Quota exceeded on all keys'], 429);
+}
 }
