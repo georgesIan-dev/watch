@@ -353,7 +353,7 @@ export default {
     name: "WatchParty",
     data() {
         return {
-            searchQuery: "",
+            searchQuery: "Trending PH",
             results: [],
             queue: [],
             currentVideoId: "",
@@ -815,6 +815,7 @@ console.log([1,2,3,4].filter(isEven));`,
 
     mounted() {
         this.fetchLiveVideos();
+        this.searchVideos();
     },
 
     beforeUnmount() {
