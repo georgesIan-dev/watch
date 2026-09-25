@@ -43,6 +43,39 @@ Route::get('/manhwa', function () {
     });
 });
 
+// MangaDex Cover Image Proxy Route
+Route::get('/manhwa/cover/{mangaId}/{fileName}', function ($mangaId, $fileName) {
+    // basic sanity check so this can't be abused as an open proxy
+    if (!preg_match('/^[a-zA-Z0-9\-\.]+$/', $mangaId) || !preg_match('/^[a-zA-Z0-9\-\.]+$/', $fileName)) {
+        abort(400, 'Invalid parameters');
+    }
+
+    $cacheKey = "manhwa_cover_{$mangaId}_{$fileName}";
+
+    $imageData = Cache::remember($cacheKey, 86400, function () use ($mangaId, $fileName) {
+        $response = Http::withHeaders([
+            'User-Agent' => 'LaravelVueManhwaApp/1.0 (https://render.com)',
+        ])->get("https://uploads.mangadex.org/covers/{$mangaId}/{$fileName}.256.jpg");
+
+        if ($response->failed()) {
+            return null;
+        }
+
+        return [
+            'body' => base64_encode($response->body()),
+            'content_type' => $response->header('Content-Type') ?: 'image/jpeg',
+        ];
+    });
+
+    if (!$imageData) {
+        abort(404, 'Cover not found');
+    }
+
+    return response(base64_decode($imageData['body']))
+        ->header('Content-Type', $imageData['content_type'])
+        ->header('Cache-Control', 'public, max-age=86400');
+});
+
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });

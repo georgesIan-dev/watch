@@ -29,6 +29,7 @@
     </div>
   </main>
 </template>
+
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
@@ -37,7 +38,7 @@ const manhwaList = ref([]);
 const loading = ref(true);
 const error = ref(null);
 
-// Your Laravel backend's own URL — NOT MangaDex directly
+// Your Laravel backend's own URL — leave blank if Vue + Laravel are the same Render service
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const fetchManhwa = async () => {
@@ -57,7 +58,7 @@ const fetchManhwa = async () => {
         description: manga.attributes.description?.en || 'No description available.',
         status: manga.attributes.status,
         coverUrl: fileName
-          ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}.256.jpg`
+          ? `${API_BASE_URL}/api/manhwa/cover/${manga.id}/${fileName}`
           : 'https://via.placeholder.com/256x360?text=No+Cover'
       };
     });
@@ -73,6 +74,7 @@ onMounted(() => {
   fetchManhwa();
 });
 </script>
+
 <style scoped>
 .container {
   max-width: 1200px;
