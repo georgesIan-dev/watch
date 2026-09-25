@@ -37,40 +37,33 @@ const manhwaList = ref([]);
 const loading = ref(true);
 const error = ref(null);
 
-const MANGADEX_API_URL = import.meta.env.VITE_MANGADEX_API_URL || 'https://api.mangadex.org';
+// Your Laravel backend's own URL — NOT MangaDex directly
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const fetchManhwa = async () => {
   loading.value = true;
   error.value = null;
-  
+
   try {
-    const { data } = await axios.get(`${MANGADEX_API_URL}/manga`, {
-      params: {
-        limit: 12,
-        'originalLanguage[]': ['ko'],
-        'order[followedCount]': 'desc',
-        'contentRating[]': ['safe', 'suggestive'],
-        'includes[]': ['cover_art']
-      }
-    });
+    const { data } = await axios.get(`${API_BASE_URL}/api/manhwa`);
 
     manhwaList.value = data.data.map((manga) => {
       const coverRel = manga.relationships.find((r) => r.type === 'cover_art');
       const fileName = coverRel?.attributes?.fileName;
-      
+
       return {
         id: manga.id,
         title: manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Untitled',
         description: manga.attributes.description?.en || 'No description available.',
         status: manga.attributes.status,
-        coverUrl: fileName 
+        coverUrl: fileName
           ? `https://uploads.mangadex.org/covers/${manga.id}/${fileName}.256.jpg`
           : 'https://via.placeholder.com/256x360?text=No+Cover'
       };
     });
   } catch (err) {
     error.value = 'Failed to load Manhwa content. Please try again later.';
-    console.error('MangaDex API Error:', err);
+    console.error('Manhwa API Error:', err);
   } finally {
     loading.value = false;
   }
