@@ -7,6 +7,21 @@
       </button>
     </header>
 
+    <div class="controls">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Search by title..."
+        class="search-input"
+      />
+      <select v-model="statusFilter" class="status-select">
+        <option value="all">All Status</option>
+        <option value="ongoing">Ongoing</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+
     <div v-if="error" class="alert-error">
       {{ error }}
     </div>
@@ -15,9 +30,13 @@
       <div v-for="i in 8" :key="i" class="card-skeleton"></div>
     </div>
 
+    <div v-else-if="filteredManhwaList.length === 0" class="empty-state">
+      No results found.
+    </div>
+
     <div v-else class="grid">
       
-        v-for="item in manhwaList"
+        v-for="item in filteredManhwaList"
         :key="item.id"
         :href="item.titleUrl"
         target="_blank"
@@ -37,15 +56,28 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 
 const manhwaList = ref([]);
 const loading = ref(true);
 const error = ref(null);
+const searchQuery = ref('');
+const statusFilter = ref('all');
 
 // Your Laravel backend's own URL — leave blank if Vue + Laravel are the same Render service
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+const filteredManhwaList = computed(() => {
+  return manhwaList.value.filter((item) => {
+    const matchesSearch = item.title
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase().trim());
+    const matchesStatus =
+      statusFilter.value === 'all' || item.status === statusFilter.value;
+    return matchesSearch && matchesStatus;
+  });
+});
 
 const fetchManhwa = async () => {
   loading.value = true;
@@ -54,21 +86,27 @@ const fetchManhwa = async () => {
   try {
     const { data } = await axios.get(`${API_BASE_URL}/api/manhwa`);
 
-    manhwaList.value = data.data.map((manga) => {
-      const coverRel = manga.relationships.find((r) => r.type === 'cover_art');
-      const fileName = coverRel?.attributes?.fileName;
+    if (!data?.data || !Array.isArray(data.data)) {
+      throw new Error('Unexpected response shape from /api/manhwa');
+    }
 
-      return {
-        id: manga.id,
-        title: manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Untitled',
-        description: manga.attributes.description?.en || 'No description available.',
-        status: manga.attributes.status,
-        coverUrl: fileName
-          ? `${API_BASE_URL}/api/manhwa/cover/${manga.id}/${fileName}`
-          : 'https://via.placeholder.com/256x360?text=No+Cover',
-        titleUrl: `https://mangadex.org/title/${manga.id}`
-      };
-    });
+    manhwaList.value = data.data
+      .filter((manga) => manga && manga.id && manga.attributes)
+      .map((manga) => {
+        const coverRel = manga.relationships?.find((r) => r.type === 'cover_art');
+        const fileName = coverRel?.attributes?.fileName;
+
+        return {
+          id: manga.id,
+          title: manga.attributes.title?.en || Object.values(manga.attributes.title || {})[0] || 'Untitled',
+          description: manga.attributes.description?.en || 'No description available.',
+          status: manga.attributes.status,
+          coverUrl: fileName
+            ? `${API_BASE_URL}/api/manhwa/cover/${manga.id}/${fileName}`
+            : 'https://via.placeholder.com/256x360?text=No+Cover',
+          titleUrl: `https://mangadex.org/title/${manga.id}`
+        };
+      });
   } catch (err) {
     error.value = 'Failed to load Manhwa content. Please try again later.';
     console.error('Manhwa API Error:', err);
@@ -95,7 +133,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .header h1 {
@@ -124,12 +162,51 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  color: #1a202c;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3182ce;
+}
+
+.status-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  color: #1a202c;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+
 .alert-error {
   padding: 1rem;
   background-color: #fed7d7;
   color: #9b2c2c;
   border-radius: 0.375rem;
   margin-bottom: 1.5rem;
+}
+
+.empty-state {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: #718096;
+  font-size: 0.95rem;
 }
 
 .grid {
