@@ -16,7 +16,14 @@
     </div>
 
     <div v-else class="grid">
-      <article v-for="item in manhwaList" :key="item.id" class="card">
+      
+        v-for="item in manhwaList"
+        :key="item.id"
+        :href="item.titleUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="card"
+      >
         <div class="cover-wrapper">
           <img :src="item.coverUrl" :alt="item.title" loading="lazy" />
           <span class="status-badge" :class="item.status">{{ item.status }}</span>
@@ -25,7 +32,7 @@
           <h2 class="title">{{ item.title }}</h2>
           <p class="description">{{ item.description }}</p>
         </div>
-      </article>
+      </a>
     </div>
   </main>
 </template>
@@ -59,7 +66,8 @@ const fetchManhwa = async () => {
         status: manga.attributes.status,
         coverUrl: fileName
           ? `${API_BASE_URL}/api/manhwa/cover/${manga.id}/${fileName}`
-          : 'https://via.placeholder.com/256x360?text=No+Cover'
+          : 'https://via.placeholder.com/256x360?text=No+Cover',
+        titleUrl: `https://mangadex.org/title/${manga.id}`
       };
     });
   } catch (err) {
@@ -140,6 +148,9 @@ onMounted(() => {
   flex-direction: column;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .card:hover {
