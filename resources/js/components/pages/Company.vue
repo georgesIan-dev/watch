@@ -32,7 +32,6 @@
           <h2 class="title">{{ item.title }}</h2>
           <p class="description">{{ item.description }}</p>
         </div>
-      </a>
     </div>
   </main>
 </template>
