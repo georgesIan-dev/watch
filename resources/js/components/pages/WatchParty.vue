@@ -660,23 +660,27 @@ console.log([1,2,3,4].filter(isEven));`,
         return `${m}:${pad(s)}`;
     },
 
-    async fetchDurations(videoList) {
-        const ids = videoList.map((v) => v.videoId).join(",");
-        if (!ids) return;
+async fetchDurations(videoList) {
+    const ids = videoList.map((v) => v.videoId).join(",");
+    if (!ids) return;
 
-        try {
-            const response = await axios.get("/api/youtube/durations", { params: { ids } });
-            const durations = response.data;
+    try {
+        const response = await axios.get("/api/youtube/durations", { params: { ids } });
+        const durations = response.data;
 
-            videoList.forEach((video) => {
-                if (durations[video.videoId]) {
-                    video.duration = this.parseDuration(durations[video.videoId]);
-                }
-            });
-        } catch (error) {
-            console.warn("Failed to fetch durations", error);
-        }
-    },
+        videoList.forEach((video) => {
+            if (durations[video.videoId]) {
+                video.duration = this.parseDuration(durations[video.videoId]);
+            }
+        });
+       // Dito na natin pinipilit mag-re-render si Vue — dahil galing ang
+        // videoList param sa ibang array reference (hindi direktang this.results),
+        // hindi agad napapansin ang pagbabago kung hindi natin i-re-assign.
+        this.results = [...this.results];
+    } catch (error) {
+        console.warn("Failed to fetch durations", error);
+    }
+},
         showError(message) {
             this.snackbar.message = message;
             this.snackbar.color = "error";
