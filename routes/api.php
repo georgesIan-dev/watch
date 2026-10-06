@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Cache;
 
 
 // duraion of videos
-Route::get('/youtube/durations', [YoutubeController::class, 'durations']);
+Route::get('/youtube/durations', [Youtubecontroller::class, 'durations']);
 
 // YouTube API Routes
 Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
