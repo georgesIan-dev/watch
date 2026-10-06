@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Cache;
 |
 */
 
+
+// duraion of videos
+Route::get('/youtube/durations', [YoutubeController::class, 'durations']);
+
 // YouTube API Routes
 Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
 Route::get('/youtube/live', [Youtubecontroller::class, 'live']);
@@ -79,3 +83,4 @@ Route::get('/manhwa/cover/{mangaId}/{fileName}', function ($mangaId, $fileName) 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+

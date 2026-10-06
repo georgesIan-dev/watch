@@ -353,6 +353,9 @@
                             >
                                 <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
                                     <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                        <v-chip v-if="video.duration" size="x-small" color="black" class="duration-badge">
+                                            {{ video.duration }}
+                                        </v-chip>
                                         <v-btn
                                             icon="mdi-plus"
                                             size="x-small"
@@ -642,6 +645,38 @@ console.log([1,2,3,4].filter(isEven));`,
     },
 
     methods: {
+      parseDuration(iso) {
+        if (!iso) return "";
+        const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (!match) return "";
+
+        const h = parseInt(match[1] || 0, 10);
+        const m = parseInt(match[2] || 0, 10);
+        const s = parseInt(match[3] || 0, 10);
+
+        const pad = (n) => String(n).padStart(2, "0");
+
+        if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+        return `${m}:${pad(s)}`;
+    },
+
+    async fetchDurations(videoList) {
+        const ids = videoList.map((v) => v.videoId).join(",");
+        if (!ids) return;
+
+        try {
+            const response = await axios.get("/api/youtube/durations", { params: { ids } });
+            const durations = response.data;
+
+            videoList.forEach((video) => {
+                if (durations[video.videoId]) {
+                    video.duration = this.parseDuration(durations[video.videoId]);
+                }
+            });
+        } catch (error) {
+            console.warn("Failed to fetch durations", error);
+        }
+    },
         showError(message) {
             this.snackbar.message = message;
             this.snackbar.color = "error";
@@ -745,7 +780,7 @@ console.log([1,2,3,4].filter(isEven));`,
                     this.results = [...this.results, ...mapped];
                 }
                 this.nextPageToken = response.data.nextPageToken || "";
-
+                this.fetchDurations(mapped);
             } catch (error) {
                 console.error("Search Error:", error);
 
@@ -895,6 +930,7 @@ console.log([1,2,3,4].filter(isEven));`,
             window.removeEventListener("mousemove", this.onResize);
             window.removeEventListener("mouseup", this.stopResize);
         },
+        
     },
 
     mounted() {
@@ -1287,5 +1323,13 @@ console.log([1,2,3,4].filter(isEven));`,
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+.duration-badge {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background-color: rgba(0, 0, 0, 0.8) !important;
+    color: white;
+    font-weight: 600;
 }
 </style>

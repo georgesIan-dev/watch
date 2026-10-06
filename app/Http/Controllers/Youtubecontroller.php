@@ -16,6 +16,39 @@ class Youtubecontroller extends Controller
         return array_values(array_filter(array_map('trim', $keys)));
     }
 
+    //durations of videos
+
+    public function durations(Request $request)
+    {
+        $request->validate(['ids' => 'required|string']);
+
+        $keys = config('services.youtube.keys', []);
+
+        foreach ($keys as $key) {
+            $response = Http::get('https://www.googleapis.com/youtube/v3/videos', [
+                'key' => $key,
+                'id' => $request->ids,
+                'part' => 'contentDetails',
+            ]);
+
+            if ($response->successful()) {
+                $durations = [];
+                foreach ($response->json('items', []) as $item) {
+                    $durations[$item['id']] = $item['contentDetails']['duration'];
+                }
+                return response()->json($durations);
+            }
+
+            if ($response->status() === 403) {
+                continue;
+            }
+
+            return response()->json(['message' => 'Failed to fetch durations'], $response->status());
+        }
+
+        return response()->json(['message' => 'Quota exceeded on all keys'], 429);
+    }
+
     private function youtubeRequest(array $params): array
     {
         $keys = $this->getApiKeys();
