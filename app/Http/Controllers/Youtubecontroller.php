@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Http;
 class Youtubecontroller extends Controller
 {
     private const SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search';
+    private const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
 
     private function getApiKeys(): array
     {
@@ -16,40 +17,7 @@ class Youtubecontroller extends Controller
         return array_values(array_filter(array_map('trim', $keys)));
     }
 
-    //durations of videos
-
-    public function durations(Request $request)
-    {
-        $request->validate(['ids' => 'required|string']);
-
-        $keys = config('services.youtube.keys', []);
-
-        foreach ($keys as $key) {
-            $response = Http::get('https://www.googleapis.com/youtube/v3/videos', [
-                'key' => $key,
-                'id' => $request->ids,
-                'part' => 'contentDetails',
-            ]);
-
-            if ($response->successful()) {
-                $durations = [];
-                foreach ($response->json('items', []) as $item) {
-                    $durations[$item['id']] = $item['contentDetails']['duration'];
-                }
-                return response()->json($durations);
-            }
-
-            if ($response->status() === 403) {
-                continue;
-            }
-
-            return response()->json(['message' => 'Failed to fetch durations'], $response->status());
-        }
-
-        return response()->json(['message' => 'Quota exceeded on all keys'], 429);
-    }
-
-    private function youtubeRequest(array $params): array
+    private function youtubeRequest(string $url, array $params): array
     {
         $keys = $this->getApiKeys();
         $lastResponse = null;
@@ -57,7 +25,7 @@ class Youtubecontroller extends Controller
         foreach ($keys as $key) {
             $response = Http::withOptions(['verify' => false, 'force_ip_resolve' => 'v4'])
                 ->timeout(30)
-                ->get(self::SEARCH_URL, array_merge($params, ['key' => $key]));
+                ->get($url, array_merge($params, ['key' => $key]));
 
             if ($response->successful()) {
                 return ['ok' => true, 'data' => $response->json()];
@@ -67,26 +35,24 @@ class Youtubecontroller extends Controller
             $body = $response->json();
             $reason = $body['error']['errors'][0]['reason'] ?? '';
 
-            // Listahan ng mga error na dapat mag-trigger ng lipat-key
             $quotaErrors = [
                 'quotaExceeded',
                 'dailyLimitExceeded',
                 'userRateLimitExceeded',
-                'rateLimitExceeded'
+                'rateLimitExceeded',
             ];
 
-            if (in_array($reason, $quotaErrors)) {
-                continue; // Lipat sa susunod na key, huwag munang mag-error
+            if (in_array($reason, $quotaErrors) || $response->status() === 403) {
+                continue;
             }
 
-            // Kung hindi quota error (e.g., Invalid Key), stop na agad ang loop
             break;
         }
 
         return [
             'ok' => false,
             'status' => $lastResponse ? $lastResponse->status() : 500,
-            'error' => $lastResponse ? ($lastResponse->json()['error']['message'] ?? 'Unknown Error') : 'No keys available'
+            'error' => $lastResponse ? ($lastResponse->json()['error']['message'] ?? 'Unknown Error') : 'No keys available',
         ];
     }
 
@@ -99,7 +65,7 @@ class Youtubecontroller extends Controller
             'maxResults' => 'nullable|integer',
         ]);
 
-        $result = $this->youtubeRequest([
+        $result = $this->youtubeRequest(self::SEARCH_URL, [
             'part' => 'snippet',
             'type' => 'video',
             'q' => $validated['q'],
@@ -118,8 +84,6 @@ class Youtubecontroller extends Controller
     {
         $query = trim((string) ($request->q ?? ''));
 
-        // Huwag munang tumawag sa YouTube API kung walang salitang "live"
-        // sa search query, para hindi mabilis maubos ang quota.
         if (!str_contains(strtolower($query), 'live')) {
             return response()->json([
                 'items' => [],
@@ -129,7 +93,7 @@ class Youtubecontroller extends Controller
             ]);
         }
 
-        $result = $this->youtubeRequest([
+        $result = $this->youtubeRequest(self::SEARCH_URL, [
             'part' => 'snippet',
             'type' => 'video',
             'eventType' => 'live',
@@ -143,31 +107,39 @@ class Youtubecontroller extends Controller
         return response()->json($result['data']);
     }
 
-    public function details(Request $request)
-{
-    $request->validate(['id' => 'required|string']);
+    public function details(Request $request): JsonResponse
+    {
+        $request->validate(['id' => 'required|string']);
 
-    $keys = config('services.youtube.keys', []);
-
-    foreach ($keys as $key) {
-        $response = Http::get('https://www.googleapis.com/youtube/v3/videos', [
-            'key' => $key,
+        $result = $this->youtubeRequest(self::VIDEOS_URL, [
             'id' => $request->id,
             'part' => 'snippet,statistics,contentDetails',
         ]);
 
-        if ($response->successful()) {
-            return response()->json($response->json());
+        if (!$result['ok']) {
+            return response()->json(['message' => $result['error']], $result['status']);
         }
-
-        // Try next key kung quota-related error
-        if ($response->status() === 403) {
-            continue;
-        }
-
-        return response()->json(['message' => 'Failed to fetch video details'], $response->status());
+        return response()->json($result['data']);
     }
 
-    return response()->json(['message' => 'Quota exceeded on all keys'], 429);
-}
+    public function durations(Request $request): JsonResponse
+    {
+        $request->validate(['ids' => 'required|string']);
+
+        $result = $this->youtubeRequest(self::VIDEOS_URL, [
+            'id' => $request->ids,
+            'part' => 'contentDetails',
+        ]);
+
+        if (!$result['ok']) {
+            return response()->json(['message' => $result['error']], $result['status']);
+        }
+
+        $durations = [];
+        foreach ($result['data']['items'] ?? [] as $item) {
+            $durations[$item['id']] = $item['contentDetails']['duration'];
+        }
+
+        return response()->json($durations);
+    }
 }
