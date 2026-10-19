@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div class="watch-page">
         <!-- ERROR SNACKBAR -->
         <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
             {{ snackbar.message }}
@@ -7,45 +7,6 @@
                 <v-btn variant="text" @click="snackbar.show = false">Close</v-btn>
             </template>
         </v-snackbar>
-
-        <!-- SHARED PLAYER HOST — one persistent iframe, repositioned via CSS between docked/floating -->
-        <div
-            v-if="currentVideoId"
-            class="player-host"
-            :class="{ 'player-host--floating': isFloating }"
-            :style="isFloating ? floatStyle : {}"
-        >
-            <div v-if="isFloating" class="float-header" @mousedown="startDrag">
-                <span class="float-title">{{ currentVideoTitle || 'Now Playing' }}</span>
-                <div class="float-actions">
-                    <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
-                </div>
-            </div>
-
-            <div class="player-frame-wrap">
-                <iframe
-                    :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                    title="YouTube video player"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen
-                    class="player-frame"
-                ></iframe>
-
-                <v-btn
-                    v-if="!isFloating"
-                    icon="mdi-picture-in-picture-top-right"
-                    size="small"
-                    variant="flat"
-                    color="surface"
-                    class="float-toggle-btn"
-                    title="Pop out to floating window"
-                    @click="openFloating"
-                />
-            </div>
-
-            <div v-if="isFloating" class="float-resize-handle" @mousedown="startResize"></div>
-        </div>
 
         <!-- CHAT MODE OVERLAY (shown while the video is floating) -->
         <div v-if="chatMode" class="chat-overlay">
@@ -125,271 +86,383 @@
             </div>
         </div>
 
-        <!-- MAIN CARD -->
-        <v-card v-if="!chatMode" variant="flat" color="surface" class="border" min-height="86vh">
-            <v-card-text>
-                <!-- HEADER -->
-                <div class="text-h6 font-weight-bold text-primary mb-3">Watch Party</div>
 
-                <!-- SEARCH -->
-                <v-card variant="tonal" color="surface-variant" class="mb-4 pa-3">
-                    <div class="d-flex align-center ga-2">
-                        <v-text-field
-                            v-model="searchQuery"
-                            variant="solo"
-                            density="comfortable"
-                            placeholder="Type something to watch... e.g. lofi music, cooking tutorial"
-                            prepend-inner-icon="mdi-magnify"
-                            hide-details
-                            clearable
-                            autofocus
-                            @keyup.enter="searchVideos"
-                        ></v-text-field>
-                        <v-btn
-                            color="primary"
-                            size="large"
-                            height="48"
-                            @click="searchVideos"
-                        >
-                            <v-icon start>mdi-magnify</v-icon>
-                            Search
-                        </v-btn>
-                    </div>
-                    <v-btn-toggle
-                        v-model="searchOrder"
-                        color="primary"
-                        density="comfortable"
-                        mandatory
-                        class="mt-2"
+        <!-- SEARCH -->
+        <div class="search-strip">
+            <div class="search-bar">
+                <div class="search-box">
+                    <v-icon size="20" class="search-box-icon">mdi-magnify</v-icon>
+                    <input
+                        v-model="searchQuery"
+                        class="search-input"
+                        type="text"
+                        placeholder="Search"
+                        aria-label="Search videos"
+                        autofocus
+                        @keyup.enter="searchVideos()"
+                    />
+                    <button
+                        v-if="searchQuery"
+                        class="icon-btn"
+                        title="Clear"
+                        aria-label="Clear search"
+                        @click="searchQuery = ''"
                     >
-                        <v-btn value="relevance" size="small">Relevance</v-btn>
-                        <v-btn value="date" size="small">Latest</v-btn>
-                    </v-btn-toggle>
-                </v-card>
+                        <v-icon size="20">mdi-close</v-icon>
+                    </button>
+                </div>
+                <button class="search-submit" title="Search" aria-label="Search" @click="searchVideos()">
+                    <v-icon size="22">mdi-magnify</v-icon>
+                </button>
+            </div>
 
-                <!-- PLAYER AREA (contained, not full-bleed) -->
-                <v-row v-if="currentVideoId">
-                    <v-col cols="12">
-                        <v-card variant="flat" color="surface-bright" class="border player-card mx-auto">
-                            <v-card-text class="pa-0 position-relative">
-                                <div v-if="!currentVideoId" class="player-placeholder d-flex align-center justify-center">
-                                    <div class="text-center text-medium-emphasis">
-                                        <v-icon size="64">mdi-youtube</v-icon>
-                                        <div class="mt-2">Search for a video and select it to start watching</div>
-                                    </div>
-                                </div>
+            <div class="chip-row">
+                <button
+                    v-for="option in orderOptions"
+                    :key="option.value"
+                    class="yt-chip"
+                    :class="{ 'yt-chip--active': searchOrder === option.value }"
+                    @click="searchOrder = option.value"
+                >
+                    {{ option.label }}
+                </button>
+            </div>
+        </div>
 
-                                <div v-else-if="!isFloating" class="player-reserve"></div>
+        <!-- WATCH LAYOUT (a video is playing) -->
+        <div v-if="currentVideoId" class="watch-grid" :class="{ 'watch-grid--theater': theaterMode }">
+            <!-- PLAYER — one persistent iframe; CSS moves it between default, theater and floating -->
+            <div
+                class="player-host"
+                :class="{
+                    'player-host--floating': isFloating,
+                    'player-host--theater': theaterMode && !isFloating,
+                }"
+                :style="isFloating ? floatStyle : {}"
+            >
+                <div v-if="isFloating" class="float-header" @mousedown="startDrag">
+                    <span class="float-title">{{ displayTitle || 'Now Playing' }}</span>
+                    <div class="float-actions">
+                        <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
+                    </div>
+                </div>
 
-                                <div v-else class="docked-placeholder d-flex align-center justify-center">
-                                    <div class="text-center text-medium-emphasis">
-                                        <v-icon size="48">mdi-picture-in-picture-top-right</v-icon>
-                                        <div class="mt-2">Playing in floating window</div>
-                                        <v-btn size="small" variant="text" color="primary" class="mt-2" @click="isFloating = false">
-                                            Dock back here
-                                        </v-btn>
-                                    </div>
-                                </div>
-                            </v-card-text>
-                        </v-card>
-                    </v-col>
-                </v-row>
+                <div class="player-frame-wrap">
+                    <iframe
+                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                        title="YouTube video player"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowfullscreen
+                        class="player-frame"
+                    ></iframe>
+                </div>
 
-                <!-- SEE MORE -->
-                <v-card v-if="currentVideoId" variant="flat" color="surface-bright" class="mt-2 border player-card mx-auto" style="max-width: 900px;">
-                    <v-card-text>
-                        <div v-if="loadingDetails" class="text-medium-emphasis">Loading details...</div>
+                <div v-if="isFloating" class="float-resize-handle" @mousedown="startResize"></div>
+            </div>
 
-                        <div v-else-if="videoDetails">
-                            <div class="d-flex align-center ga-3 mb-2 flex-wrap">
-                                <span class="text-caption text-medium-emphasis">
-                                    {{ formatCount(videoDetails.viewCount) }} views
-                                </span>
-                                <span class="text-caption text-medium-emphasis">•</span>
-                                <span class="text-caption text-medium-emphasis">
-                                    Uploaded {{ formatDate(videoDetails.publishedAt) }}
-                                </span>
-                                <span class="text-caption text-medium-emphasis">•</span>
-                                <span class="text-caption text-medium-emphasis">
-                                    {{ formatCount(videoDetails.likeCount) }} likes
-                                </span>
+            <!-- VIDEO INFO -->
+            <section class="watch-info">
+                <h1 class="watch-title">{{ displayTitle }}</h1>
+
+                <div class="watch-meta-row">
+                    <div class="channel">
+                        <div class="channel-avatar">{{ channelInitial(displayChannel) }}</div>
+                        <span class="channel-name">{{ displayChannel }}</span>
+                    </div>
+
+                    <div class="watch-actions">
+                        <span v-if="videoDetails" class="yt-pill yt-pill--static" title="Likes">
+                            <v-icon size="18">mdi-thumb-up-outline</v-icon>
+                            {{ formatCount(videoDetails.likeCount) }}
+                        </span>
+                        <button
+                            class="yt-pill theater-toggle"
+                            :title="theaterMode ? 'Default view (t)' : 'Theater mode (t)'"
+                            @click="toggleTheater"
+                        >
+                            <v-icon size="18">{{ theaterMode ? 'mdi-crop-square' : 'mdi-rectangle-outline' }}</v-icon>
+                            {{ theaterMode ? 'Default view' : 'Theater' }}
+                        </button>
+                        <button class="yt-pill" title="Pop out to floating window" @click="openFloating">
+                            <v-icon size="18">mdi-picture-in-picture-bottom-right</v-icon>
+                            Pop out
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    v-if="loadingDetails || videoDetails"
+                    class="description-box"
+                    :class="{ 'description-box--open': showDescription }"
+                    @click="expandDescription"
+                >
+                    <div v-if="loadingDetails" class="text-medium-emphasis">Loading details...</div>
+
+                    <template v-else>
+                        <div class="description-stats">
+                            <span>{{ formatCount(videoDetails.viewCount) }} views</span>
+                            <span>{{ timeAgo(videoDetails.publishedAt) }}</span>
+                            <span>{{ formatDate(videoDetails.publishedAt) }}</span>
+                        </div>
+
+                        <div class="description-text" :class="{ 'description-clamped': !showDescription }">{{ videoDetails.description }}</div>
+
+                        <button
+                            v-if="videoDetails.description && videoDetails.description.length > 150"
+                            class="description-toggle"
+                            @click.stop="showDescription = !showDescription"
+                        >
+                            {{ showDescription ? 'Show less' : '...more' }}
+                        </button>
+                    </template>
+                </div>
+            </section>
+
+            <!-- SIDE: QUEUE + SEARCH RESULTS -->
+            <aside class="watch-side">
+                <div v-if="queue.length" class="queue-panel">
+                    <div class="queue-head">
+                        Queue <span class="queue-count">{{ queue.length }}</span>
+                    </div>
+                    <div class="queue-list">
+                        <div
+                            v-for="(item, index) in queue"
+                            :key="item.videoId + index"
+                            class="compact-row"
+                            role="button"
+                            tabindex="0"
+                            @click="playFromQueue(index)"
+                            @keydown.enter="playFromQueue(index)"
+                        >
+                            <div class="thumb thumb--compact thumb--queue">
+                                <v-img :src="item.thumbnail" aspect-ratio="1.7778" cover>
+                                    <span v-if="item.duration" class="duration-badge">{{ item.duration }}</span>
+                                </v-img>
                             </div>
-
-                            <div class="text-subtitle-2 font-weight-medium mb-1">{{ videoDetails.channelTitle }}</div>
-
-                            <div
-                                class="text-body-2"
-                                :class="{ 'description-clamped': !showDescription }"
-                                style="white-space: pre-line;"
-                            >
-                                {{ videoDetails.description }}
+                            <div class="compact-text">
+                                <div class="video-title video-title--compact">{{ item.title }}</div>
+                                <div class="video-sub">{{ item.channelTitle }}</div>
                             </div>
-
-                            <v-btn
-                                v-if="videoDetails.description && videoDetails.description.length > 150"
-                                size="small"
-                                variant="text"
-                                class="mt-1 pa-0"
-                                @click="showDescription = !showDescription"
+                            <button
+                                class="icon-btn row-action"
+                                title="Remove from queue"
+                                aria-label="Remove from queue"
+                                @click.stop="removeFromQueue(index)"
                             >
-                                {{ showDescription ? 'Show less' : 'See more' }}
-                            </v-btn>
+                                <v-icon size="18">mdi-close</v-icon>
+                            </button>
                         </div>
-                    </v-card-text>
-                </v-card>
+                    </div>
+                </div>
 
+                <div>
+                    <div class="side-heading">Search results</div>
 
-                <!-- QUEUE -->
-                <v-card variant="flat" color="surface-bright" class="mt-4 border">
-                    <v-card-text>
-                        <div class="text-subtitle-2 font-weight-bold mb-2">
-                            Queue ({{ queue.length }})
-                        </div>
-                        <div v-if="queue.length === 0" class="text-medium-emphasis">
-                            No videos queued yet. Add videos from the search results.
-                        </div>
-                        <v-row v-else>
-                            <v-col
-                                v-for="(item, index) in queue"
-                                :key="item.videoId + index"
-                                cols="6"
-                                sm="4"
-                                md="3"
-                                lg="2"
+                    <div v-if="loading && results.length === 0" class="d-flex justify-center pa-6">
+                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                    </div>
+
+                    <div v-else-if="results.length === 0" class="empty-text">
+                        No results yet. Try searching for something above.
+                    </div>
+
+                    <div v-else class="compact-list" :class="{ 'is-loading': loading }">
+                        <div
+                            v-for="video in results"
+                            :key="video.videoId"
+                            class="compact-row"
+                            :class="{ 'compact-row--active': video.videoId === currentVideoId }"
+                            role="button"
+                            tabindex="0"
+                            @click="playVideo(video)"
+                            @keydown.enter="playVideo(video)"
+                        >
+                            <div class="thumb thumb--compact">
+                                <v-img :src="video.thumbnail" aspect-ratio="1.7778" cover>
+                                    <span v-if="video.duration" class="duration-badge">{{ video.duration }}</span>
+                                </v-img>
+                            </div>
+                            <div class="compact-text">
+                                <div class="video-title video-title--compact">{{ video.title }}</div>
+                                <div class="video-sub">{{ video.channelTitle }}</div>
+                                <div class="video-sub" :title="formatDate(video.publishedAt)">{{ uploadedLabel(video.publishedAt) }}</div>
+                            </div>
+                            <button
+                                class="icon-btn row-action"
+                                title="Add to queue"
+                                aria-label="Add to queue"
+                                @click.stop="addToQueue(video)"
                             >
-                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playFromQueue(index)">
-                                    <v-img :src="item.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
-                                        <v-btn
-                                            icon="mdi-close"
-                                            size="x-small"
-                                            variant="flat"
-                                            color="surface"
-                                            class="grid-remove-btn"
-                                            @click.stop="removeFromQueue(index)"
-                                        />
-                                    </v-img>
-                                    <div class="pa-2">
-                                        <div class="text-caption font-weight-medium grid-title">{{ item.title }}</div>
-                                    </div>
-                                </v-card>
-                            </v-col>
-                        </v-row>
-                    </v-card-text>
-                </v-card>
-
-                <!-- LIVE NOW -->
-                <!-- <v-card variant="flat" color="surface-bright" class="mt-4 border">
-                    <v-card-text>
-                        <div class="d-flex align-center mb-2">
-                            <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
-                            <span class="text-subtitle-2 font-weight-bold">Live Now</span>
-                            <v-spacer />
-                            <v-btn icon="mdi-refresh" size="small" variant="text" @click="fetchLiveVideos" />
+                                <v-icon size="20">mdi-playlist-plus</v-icon>
+                            </button>
                         </div>
+                    </div>
 
-                        <div v-if="loadingLive" class="d-flex justify-center pa-4">
-                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                    <div v-if="nextPageToken && results.length" class="d-flex justify-center mt-4">
+                        <button class="yt-pill" @click="searchVideos(true)">Load more</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- BROWSE LAYOUT (nothing playing yet) -->
+        <div v-else class="browse">
+            <section v-if="queue.length" class="browse-section">
+                <div class="browse-heading">Queue <span class="queue-count">{{ queue.length }}</span></div>
+                <div class="browse-grid">
+                    <div
+                        v-for="(item, index) in queue"
+                        :key="item.videoId + index"
+                        class="video-card"
+                        role="button"
+                        tabindex="0"
+                        @click="playFromQueue(index)"
+                        @keydown.enter="playFromQueue(index)"
+                    >
+                        <div class="thumb">
+                            <v-img :src="item.thumbnail" aspect-ratio="1.7778" cover>
+                                <span v-if="item.duration" class="duration-badge">{{ item.duration }}</span>
+                                <button
+                                    class="icon-btn thumb-action"
+                                    title="Remove from queue"
+                                    aria-label="Remove from queue"
+                                    @click.stop="removeFromQueue(index)"
+                                >
+                                    <v-icon size="18">mdi-close</v-icon>
+                                </button>
+                            </v-img>
                         </div>
-
-                        <div v-else-if="liveResults.length === 0" class="text-medium-emphasis">
-                            No live videos found right now.
+                        <div class="card-body">
+                            <div class="channel-avatar channel-avatar--sm">{{ channelInitial(item.channelTitle) }}</div>
+                            <div class="card-text">
+                                <div class="video-title">{{ item.title }}</div>
+                                <div class="video-sub video-sub--lg">{{ item.channelTitle }}</div>
+                                <div class="video-sub video-sub--lg" :title="formatDate(item.publishedAt)">{{ uploadedLabel(item.publishedAt) }}</div>
+                            </div>
                         </div>
+                    </div>
+                </div>
+            </section>
 
-                        <v-row v-else>
-                            <v-col
-                                v-for="video in liveResults"
-                                :key="video.videoId"
-                                cols="6"
-                                sm="4"
-                                md="3"
-                                lg="2"
-                            >
-                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
-                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
-                                        <v-chip size="x-small" color="error" class="live-badge">LIVE</v-chip>
-                                        <v-btn
-                                            icon="mdi-plus"
-                                            size="x-small"
-                                            variant="flat"
-                                            color="surface"
-                                            class="grid-remove-btn"
-                                            title="Add to queue"
-                                            @click.stop="addToQueue(video)"
-                                        />
-                                    </v-img>
-                                    <div class="pa-2">
-                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
-                                        <div class="text-caption grid-channel">{{ video.channelTitle }}</div>
-                                    </div>
-                                </v-card>
-                            </v-col>
-                        </v-row>
-                    </v-card-text>
-                </v-card> -->
+            <!-- LIVE NOW -->
+            <!-- <v-card variant="flat" color="surface-bright" class="mt-4 border">
+                <v-card-text>
+                    <div class="d-flex align-center mb-2">
+                        <v-icon color="error" size="14" class="mr-1">mdi-circle</v-icon>
+                        <span class="text-subtitle-2 font-weight-bold">Live Now</span>
+                        <v-spacer />
+                        <v-btn icon="mdi-refresh" size="small" variant="text" @click="fetchLiveVideos" />
+                    </div>
 
-                <!-- SEARCH RESULTS (grid) -->
-                <v-card variant="flat" color="surface-bright" class="mt-4 border">
-                    <v-card-text>
-                        <div class="text-subtitle-2 font-weight-bold mb-2">
-                            Search Results
+                    <div v-if="loadingLive" class="d-flex justify-center pa-4">
+                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                    </div>
+
+                    <div v-else-if="liveResults.length === 0" class="text-medium-emphasis">
+                        No live videos found right now.
+                    </div>
+
+                    <v-row v-else>
+                        <v-col
+                            v-for="video in liveResults"
+                            :key="video.videoId"
+                            cols="6"
+                            sm="4"
+                            md="3"
+                            lg="2"
+                        >
+                            <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
+                                <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
+                                    <v-chip size="x-small" color="error" class="live-badge">LIVE</v-chip>
+                                    <v-btn
+                                        icon="mdi-plus"
+                                        size="x-small"
+                                        variant="flat"
+                                        color="surface"
+                                        class="grid-remove-btn"
+                                        title="Add to queue"
+                                        @click.stop="addToQueue(video)"
+                                    />
+                                </v-img>
+                                <div class="pa-2">
+                                    <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
+                                    <div class="text-caption grid-channel">{{ video.channelTitle }}</div>
+                                </div>
+                            </v-card>
+                        </v-col>
+                    </v-row>
+                </v-card-text>
+            </v-card> -->
+
+            <section class="browse-section">
+                <div v-if="queue.length" class="browse-heading">Search results</div>
+
+                <div v-if="loading && results.length === 0" class="d-flex justify-center pa-8">
+                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                </div>
+
+                <div v-else-if="results.length === 0" class="empty-text">
+                    No results yet. Try searching for something above.
+                </div>
+
+                <div v-else class="browse-grid" :class="{ 'is-loading': loading }">
+                    <div
+                        v-for="video in results"
+                        :key="video.videoId"
+                        class="video-card"
+                        role="button"
+                        tabindex="0"
+                        @click="playVideo(video)"
+                        @keydown.enter="playVideo(video)"
+                    >
+                        <div class="thumb">
+                            <v-img :src="video.thumbnail" aspect-ratio="1.7778" cover>
+                                <span v-if="video.duration" class="duration-badge">{{ video.duration }}</span>
+                                <button
+                                    class="icon-btn thumb-action"
+                                    title="Add to queue"
+                                    aria-label="Add to queue"
+                                    @click.stop="addToQueue(video)"
+                                >
+                                    <v-icon size="20">mdi-playlist-plus</v-icon>
+                                </button>
+                            </v-img>
                         </div>
-
-                        <div v-if="loading" class="d-flex justify-center pa-4">
-                            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                        <div class="card-body">
+                            <div class="channel-avatar channel-avatar--sm">{{ channelInitial(video.channelTitle) }}</div>
+                            <div class="card-text">
+                                <div class="video-title">{{ video.title }}</div>
+                                <div class="video-sub video-sub--lg">{{ video.channelTitle }}</div>
+                                <div class="video-sub video-sub--lg" :title="formatDate(video.publishedAt)">{{ uploadedLabel(video.publishedAt) }}</div>
+                            </div>
                         </div>
+                    </div>
+                </div>
 
-                        <div v-else-if="results.length === 0" class="text-medium-emphasis">
-                            No results yet. Try searching for something above.
-                        </div>
-
-                        <v-row v-else>
-                            <v-col
-                                v-for="video in results"
-                                :key="video.videoId"
-                                cols="6"
-                                sm="4"
-                                md="3"
-                                lg="2"
-                            >
-                                <v-card variant="tonal" color="surface-variant" class="grid-card" @click="playVideo(video)">
-                                    <v-img :src="video.thumbnail" aspect-ratio="1.77" cover class="grid-thumb">
-                                        <v-chip v-if="video.duration" size="x-small" color="black" class="duration-badge">
-                                            {{ video.duration }}
-                                        </v-chip>
-                                        <v-btn
-                                            icon="mdi-plus"
-                                            size="x-small"
-                                            variant="flat"
-                                            color="surface"
-                                            class="grid-remove-btn"
-                                            title="Add to queue"
-                                            @click.stop="addToQueue(video)"
-                                        />
-                                    </v-img>
-                                    <div class="pa-2">
-                                        <div class="text-caption font-weight-medium grid-title">{{ video.title }}</div>
-                                        <div class="text-caption text-medium-emphasis">{{ video.channelTitle }}</div>
-                                    </div>
-                                </v-card>
-                            </v-col>
-                        </v-row>
-
-                        <div v-if="nextPageToken" class="d-flex justify-center mt-3">
-                            <v-btn variant="text" size="small" @click="searchVideos(true)">
-                                Load more
-                            </v-btn>
-                        </div>
-                    </v-card-text>
-                </v-card>
-            </v-card-text>
-        </v-card>
+                <div v-if="nextPageToken && results.length" class="d-flex justify-center mt-8">
+                    <button class="yt-pill" @click="searchVideos(true)">Load more</button>
+                </div>
+            </section>
+        </div>
     </div>
 </template>
+
 
 <script>
 import axios from "axios";
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
 const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
+const THEATER_STORAGE_KEY = "watchParty.theaterMode";
+
+// Remember theater mode between visits, like YouTube does.
+function readTheaterPreference() {
+    try {
+        return localStorage.getItem(THEATER_STORAGE_KEY) === "1";
+    } catch (e) {
+        return false;
+    }
+}
 
 export default {
     name: "WatchParty",
@@ -400,6 +473,7 @@ export default {
             queue: [],
             currentVideoId: "",
             currentVideoTitle: "",
+            currentChannelTitle: "",
             loading: false,
             nextPageToken: "",
             snackbar: {
@@ -417,6 +491,13 @@ export default {
             loadingLive: false,
             // search ORDER BY DATE
             searchOrder: "relevance",
+            orderOptions: [
+                { value: "relevance", label: "Relevance" },
+                { value: "date", label: "Latest" },
+            ],
+
+            // Theater mode (wide player)
+            theaterMode: readTheaterPreference(),
 
             // Floating window state
             isFloating: false,
@@ -615,6 +696,14 @@ console.log([1,2,3,4].filter(isEven));`,
         };
     },
     computed: {
+        // Details endpoint returns clean text; search snippets are only a fallback
+        // so the title/channel show instantly while details are loading.
+        displayTitle() {
+            return this.videoDetails?.title || this.currentVideoTitle;
+        },
+        displayChannel() {
+            return this.videoDetails?.channelTitle || this.currentChannelTitle;
+        },
         floatStyle() {
             return {
                 top: this.floatPos.y + 'px',
@@ -641,6 +730,10 @@ console.log([1,2,3,4].filter(isEven));`,
             if(this.searchQuery && this.searchQuery.trim()){
                 this.searchVideos();
             }
+        },
+        // Hide the page scrollbar behind the full-screen chat overlay.
+        chatMode(active) {
+            document.documentElement.style.overflow = active ? "hidden" : "";
         },
     },
 
@@ -716,6 +809,50 @@ async fetchDurations(videoList) {
         });
     },
 
+    formatShortDate(dateStr) {
+        if (!dateStr) return "";
+        return new Date(dateStr).toLocaleDateString("en-US", {
+            year: "numeric", month: "short", day: "numeric",
+        });
+    },
+
+    // "3 days ago", "2 weeks ago" — same wording as YouTube.
+    timeAgo(dateStr) {
+        if (!dateStr) return "";
+        const seconds = Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000));
+        const units = [
+            ["year", 31536000],
+            ["month", 2592000],
+            ["week", 604800],
+            ["day", 86400],
+            ["hour", 3600],
+            ["minute", 60],
+        ];
+        for (const [name, size] of units) {
+            const value = Math.floor(seconds / size);
+            if (value >= 1) return `${value} ${name}${value > 1 ? "s" : ""} ago`;
+        }
+        return "just now";
+    },
+
+    // Shown under every video card: "3 days ago • Oct 16, 2026"
+    uploadedLabel(dateStr) {
+        if (!dateStr) return "";
+        return `${this.timeAgo(dateStr)} • ${this.formatShortDate(dateStr)}`;
+    },
+
+    // The search API returns titles HTML-escaped (e.g. &#39; and &amp;).
+    decodeHtml(text) {
+        if (!text) return "";
+        const el = document.createElement("textarea");
+        el.innerHTML = text;
+        return el.value;
+    },
+
+    channelInitial(name) {
+        return (name || "?").trim().charAt(0).toUpperCase();
+    },
+
     formatCount(num) {
         if (!num) return "0";
         num = parseInt(num, 10);
@@ -740,9 +877,10 @@ async fetchDurations(videoList) {
                 const items = response.data.items || [];
                 this.liveResults = items.map((item) => ({
                     videoId: item.id.videoId,
-                    title: item.snippet.title,
-                    channelTitle: item.snippet.channelTitle,
+                    title: this.decodeHtml(item.snippet.title),
+                    channelTitle: this.decodeHtml(item.snippet.channelTitle),
                     thumbnail: item.snippet.thumbnails?.medium?.url,
+                    publishedAt: item.snippet.publishedAt,
                 }));
             } catch (error) {
                 // SILENT ERROR: Huwag magpakita ng snackbar para sa Live Videos
@@ -773,9 +911,10 @@ async fetchDurations(videoList) {
                 const items = response.data.items || [];
                 const mapped = items.map((item) => ({
                     videoId: item.id.videoId,
-                    title: item.snippet.title,
-                    channelTitle: item.snippet.channelTitle,
+                    title: this.decodeHtml(item.snippet.title),
+                    channelTitle: this.decodeHtml(item.snippet.channelTitle),
                     thumbnail: item.snippet.thumbnails?.medium?.url,
+                    publishedAt: item.snippet.publishedAt,
                 }));
 
                 if (!loadMore) {
@@ -805,8 +944,10 @@ async fetchDurations(videoList) {
         playVideo(video) {
             this.currentVideoId = video.videoId;
             this.currentVideoTitle = video.title;
+            this.currentChannelTitle = video.channelTitle;
+            this.showDescription = false;
             this.fetchVideoDetails(video.videoId);
-
+            window.scrollTo({ top: 0 });
         },
 
         addToQueue(video) {
@@ -821,10 +962,9 @@ async fetchDurations(videoList) {
         playFromQueue(index) {
             const video = this.queue[index];
             if (video) {
+                // playVideo() already fetches the details — no second API call needed.
                 this.playVideo(video);
                 this.queue.splice(index, 1);
-                this.fetchVideoDetails(video.videoId);
-
             }
         },
 ///        openFloating() {
@@ -848,6 +988,29 @@ async fetchDurations(videoList) {
         closeFloating() {
             this.isFloating = false;
             this.chatMode = false;
+        },
+
+        expandDescription() {
+            if (!this.showDescription) this.showDescription = true;
+        },
+
+        toggleTheater() {
+            this.theaterMode = !this.theaterMode;
+            try {
+                localStorage.setItem(THEATER_STORAGE_KEY, this.theaterMode ? "1" : "0");
+            } catch (e) {
+                // storage blocked — theater mode still works for this visit
+            }
+        },
+
+        // "t" toggles theater mode, same shortcut as YouTube.
+        onGlobalKeydown(event) {
+            if (event.key !== "t" && event.key !== "T") return;
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            const target = event.target;
+            if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+            if (!this.currentVideoId || this.isFloating) return;
+            this.toggleTheater();
         },
 
         sendChatMessage() {
@@ -940,9 +1103,12 @@ async fetchDurations(videoList) {
     mounted() {
         this.fetchLiveVideos();
         this.searchVideos();
+        window.addEventListener("keydown", this.onGlobalKeydown);
     },
 
     beforeUnmount() {
+        window.removeEventListener("keydown", this.onGlobalKeydown);
+        document.documentElement.style.overflow = "";
         window.removeEventListener("mousemove", this.onDrag);
         window.removeEventListener("mouseup", this.stopDrag);
         window.removeEventListener("mousemove", this.onResize);
@@ -952,29 +1118,229 @@ async fetchDurations(videoList) {
 </script>
 
 <style scoped>
-.player-card {
-    max-width: 900px;
+/* ===== PAGE ===== */
+.watch-page {
+    min-height: 100%;
+    padding-bottom: 48px;
+    overflow-x: clip; /* theater player bleeds to the viewport edges */
+}
+
+.empty-text {
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 14px;
+    padding: 24px 0;
+}
+
+.is-loading {
+    opacity: 0.5;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+/* ===== SEARCH ===== */
+.search-strip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px 16px;
+}
+
+.search-bar {
+    display: flex;
+    width: 100%;
+    max-width: 640px;
+    height: 40px;
+}
+
+.search-box {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 4px 0 16px;
+    background-color: rgb(var(--v-theme-background));
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
+    border-right: none;
+    border-radius: 40px 0 0 40px;
+}
+
+.search-box:focus-within {
+    border-color: rgb(var(--v-theme-primary));
+}
+
+.search-box-icon {
+    color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: rgb(var(--v-theme-on-surface));
+    font-family: inherit;
+    font-size: 16px;
+}
+
+.search-input::placeholder {
+    color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.search-submit {
+    flex: 0 0 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(var(--v-theme-on-surface), 0.08);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
+    border-radius: 0 40px 40px 0;
+    color: rgb(var(--v-theme-on-surface));
+    cursor: pointer;
+}
+
+.search-submit:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.16);
+}
+
+.chip-row {
+    display: flex;
+    gap: 12px;
+}
+
+.yt-chip {
+    height: 32px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+    color: rgb(var(--v-theme-on-surface));
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.yt-chip:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.2);
+}
+
+.yt-chip--active,
+.yt-chip--active:hover {
+    background-color: rgb(var(--v-theme-on-surface));
+    color: rgb(var(--v-theme-background));
+}
+
+/* ===== SHARED BUTTONS ===== */
+.icon-btn {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: rgb(var(--v-theme-on-surface));
+    cursor: pointer;
+}
+
+.icon-btn:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.yt-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 16px;
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+    border: none;
+    border-radius: 18px;
+    color: rgb(var(--v-theme-on-surface));
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.yt-pill:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.2);
+}
+
+.yt-pill--static,
+.yt-pill--static:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+    cursor: default;
+}
+
+.yt-chip:focus-visible,
+.yt-pill:focus-visible,
+.icon-btn:focus-visible,
+.search-submit:focus-visible,
+.description-toggle:focus-visible,
+.compact-row:focus-visible,
+.video-card:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 2px;
+}
+
+/* ===== WATCH LAYOUT ===== */
+.watch-grid {
+    --side-width: 402px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--side-width);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "player side"
+        "info   side";
+    column-gap: 24px;
+    align-items: start;
+    max-width: 1754px;
+    margin: 0 auto;
+    padding: 8px 24px 0;
+}
+
+.watch-grid--theater {
+    grid-template-areas:
+        "player player"
+        "info   side";
+    padding-top: 0;
 }
 
 .player-host {
+    grid-area: player;
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background-color: black;
+    max-height: calc(100vh - 64px - 140px);
+    background-color: #000;
     border-radius: 12px;
     overflow: hidden;
 }
 
-.player-host:not(.player-host--floating) {
-    max-width: 900px;
-    max-height: 480px;
-    margin: 0 auto;
+/* Theater: full-bleed black band across the whole window */
+.player-host--theater {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    aspect-ratio: auto;
+    height: min(56.25vw, max(480px, calc(100vh - 64px - 140px)));
+    max-height: none;
+    border-radius: 0;
 }
 
 .player-host--floating {
     position: fixed;
     z-index: 2400;
     aspect-ratio: unset;
+    max-height: none;
+    margin: 0;
     display: flex;
     flex-direction: column;
     border: 1px solid rgb(var(--v-theme-surface-variant));
@@ -982,15 +1348,6 @@ async fetchDurations(videoList) {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     min-width: 240px;
     min-height: 160px;
-}
-.live-badge {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    font-weight: 700;
-}
-.player-reserve {
-    display: none;
 }
 
 .player-frame-wrap {
@@ -1006,22 +1363,6 @@ async fetchDurations(videoList) {
     width: 100%;
     height: 100%;
     border: 0;
-}
-
-.player-placeholder,
-.docked-placeholder {
-    width: 100%;
-    max-width: 900px;
-    height: 400px;
-    margin: 0 auto;
-    background-color: rgb(var(--v-theme-surface-variant));
-}
-
-.float-toggle-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    opacity: 0.85;
 }
 
 .float-header {
@@ -1071,33 +1412,403 @@ async fetchDurations(videoList) {
     opacity: 0.6;
 }
 
-/* ===== GRID CARDS (queue + search results) ===== */
-.grid-card {
+/* ===== VIDEO INFO ===== */
+.watch-info {
+    grid-area: info;
+    min-width: 0;
+    padding-top: 12px;
+}
+
+.watch-title {
+    margin: 0 0 12px;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.watch-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.channel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.channel-avatar {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background-color: rgba(var(--v-theme-on-surface), 0.12);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.channel-avatar--sm {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+}
+
+.channel-name {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.watch-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.description-box {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+    font-size: 14px;
+    line-height: 20px;
     cursor: pointer;
-    height: 100%;
+}
+
+.description-box:not(.description-box--open):hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.16);
+}
+
+.description-box--open {
+    cursor: default;
+}
+
+.description-stats {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 10px;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.description-text {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.description-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.description-toggle {
+    margin-top: 4px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: rgb(var(--v-theme-on-surface));
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* ===== SIDE COLUMN ===== */
+.watch-side {
+    grid-area: side;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 16px;
 }
 
-.grid-thumb {
+.watch-grid--theater .watch-side {
+    padding-top: 12px;
+}
+
+.side-heading {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.queue-panel {
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.queue-head {
+    padding: 12px 16px;
+    background-color: rgba(var(--v-theme-on-surface), 0.06);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.queue-count {
+    margin-left: 6px;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-weight: 400;
+}
+
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 360px;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.compact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.compact-row {
     position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: 8px;
+    cursor: pointer;
 }
 
-.grid-remove-btn {
+.compact-row--active {
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.compact-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 32px 0 0;
+}
+
+.row-action {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    opacity: 0.9;
+    top: -4px;
+    right: -6px;
 }
 
-.grid-title {
+/* ===== THUMBNAILS & TEXT ===== */
+.thumb {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.thumb--compact {
+    flex: 0 0 168px;
+    width: 168px;
+    border-radius: 8px;
+}
+
+.thumb--queue {
+    flex-basis: 120px;
+    width: 120px;
+}
+
+.duration-badge {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+}
+
+.video-title {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    line-height: 1.3;
-    color: #f2f2f2;
+    margin-bottom: 4px;
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
 
+.video-title--compact {
+    font-size: 14px;
+    line-height: 20px;
+}
+
+.video-sub {
+    overflow: hidden;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 12px;
+    line-height: 18px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.video-sub--lg {
+    font-size: 14px;
+    line-height: 20px;
+}
+
+/* ===== BROWSE LAYOUT ===== */
+.browse {
+    max-width: 1754px;
+    margin: 0 auto;
+    padding: 8px 24px 0;
+}
+
+.browse-section + .browse-section {
+    margin-top: 40px;
+}
+
+.browse-heading {
+    margin-bottom: 16px;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.browse-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 40px 16px;
+}
+
+.video-card {
+    min-width: 0;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.card-body {
+    display: flex;
+    gap: 12px;
+    padding-top: 12px;
+}
+
+.card-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.thumb-action {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #fff;
+}
+
+.thumb-action:hover {
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.live-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-weight: 700;
+}
+
+/* Hover-only controls on mouse devices; always visible on touch */
+@media (hover: hover) {
+    .row-action,
+    .thumb-action {
+        opacity: 0;
+    }
+
+    .compact-row:hover .row-action,
+    .video-card:hover .thumb-action,
+    .row-action:focus-visible,
+    .thumb-action:focus-visible {
+        opacity: 1;
+    }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1280px) {
+    .watch-grid {
+        --side-width: 360px;
+    }
+}
+
+@media (max-width: 960px) {
+    .watch-grid,
+    .watch-grid--theater {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas:
+            "player"
+            "info"
+            "side";
+        padding: 0;
+    }
+
+    .player-host:not(.player-host--floating) {
+        width: 100%;
+        height: auto;
+        margin-left: 0;
+        aspect-ratio: 16 / 9;
+        max-height: none;
+        border-radius: 0;
+    }
+
+    .watch-info,
+    .watch-side {
+        padding: 12px 16px 0;
+    }
+
+    .watch-side {
+        margin-top: 12px;
+    }
+
+    .theater-toggle {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .search-strip {
+        padding: 12px 12px 12px;
+    }
+
+    .browse {
+        padding: 0;
+    }
+
+    .browse-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+    }
+
+    .browse .thumb {
+        border-radius: 0;
+    }
+
+    .card-body,
+    .browse-heading,
+    .browse .empty-text {
+        padding-inline: 12px;
+    }
+
+    .thumb--compact {
+        flex-basis: 140px;
+        width: 140px;
+    }
 }
 
 /* ===== CHAT MODE OVERLAY ===== */
@@ -1321,19 +2032,5 @@ async fetchDurations(videoList) {
     font-size: 0.85rem;
     color: #d4d4d4;
     cursor: default;
-}
-.description-clamped {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-.duration-badge {
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    background-color: rgba(0, 0, 0, 0.8) !important;
-    color: white;
-    font-weight: 600;
 }
 </style>
