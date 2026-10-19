@@ -39,6 +39,9 @@ COPY . /var/www/html
 
 # Bring in the built frontend assets from stage 1
 COPY --from=frontend /app/public/build /var/www/html/public/build
+# The service worker + manifest are copied to the public root by the postbuild step
+COPY --from=frontend /app/public/sw.js /var/www/html/public/sw.js
+COPY --from=frontend /app/public/manifest.webmanifest /var/www/html/public/manifest.webmanifest
 
 # Install Composer dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev

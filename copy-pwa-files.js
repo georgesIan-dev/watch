@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const filesToCopy = ['manifest.webmanifest', 'sw.js', 'workbox-9c191d2f.js'];
+// sw.js must sit at the site root so it can control every page (scope "/").
+const filesToCopy = ['manifest.webmanifest', 'sw.js'];
 
 filesToCopy.forEach((file) => {
     const src = path.join(__dirname, 'public', 'build', file);
