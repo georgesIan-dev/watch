@@ -9,83 +9,134 @@
         </v-snackbar>
 
         <!-- CHAT MODE OVERLAY (shown while the video is floating) -->
-        <div v-if="chatMode" class="chat-overlay">
-            <div class="chat-sidebar">
-                <div class="chat-sidebar-brand">Claude</div>
-
-                <div class="chat-sidebar-item chat-sidebar-item--active">
-                    <v-icon size="18" class="mr-2">mdi-plus</v-icon> New
+        <div v-if="chatMode" class="chat-overlay" :class="{ 'chat-overlay--menu-open': chatMenuOpen }">
+            <aside class="chat-sidebar">
+                <div class="chat-brand">
+                    <span class="brand-mark" aria-hidden="true"></span>
+                    <span class="brand-name">Diwa</span>
+                    <button class="chat-icon-btn chat-sidebar-close" aria-label="Close menu" @click="chatMenuOpen = false">
+                        <v-icon size="20">mdi-close</v-icon>
+                    </button>
                 </div>
-                <div class="chat-sidebar-item"><v-icon size="18" class="mr-2">mdi-archive-outline</v-icon> Projects</div>
-                <div class="chat-sidebar-item"><v-icon size="18" class="mr-2">mdi-shape-outline</v-icon> Artifacts</div>
-                <div class="chat-sidebar-item"><v-icon size="18" class="mr-2">mdi-code-tags</v-icon> Code</div>
-                <div class="chat-sidebar-item"><v-icon size="18" class="mr-2">mdi-tune</v-icon> Customize</div>
 
-                <div class="chat-sidebar-label mt-4 mb-1">Chats and tasks</div>
-                <div class="chat-sidebar-item chat-sidebar-item--muted" v-for="n in 6" :key="n">Untitled chat</div>
+                <button class="chat-new-btn" @click="startNewChat">
+                    <v-icon size="18">mdi-square-edit-outline</v-icon>
+                    New chat
+                </button>
 
-                <v-spacer />
+                <nav class="chat-nav">
+                    <div class="chat-nav-item"><v-icon size="18">mdi-magnify</v-icon> Search chats</div>
+                    <div class="chat-nav-item"><v-icon size="18">mdi-bookmark-outline</v-icon> Saved prompts</div>
+                    <div class="chat-nav-item"><v-icon size="18">mdi-folder-outline</v-icon> Files</div>
+                </nav>
 
-                <div class="chat-sidebar-footer">
-                    <v-avatar size="24" color="primary" class="mr-2">
-                        <span class="text-caption">U</span>
-                    </v-avatar>
-                    User · Free
+                <div class="chat-recent-label">Recent</div>
+                <div class="chat-recent">
+                    <div v-for="title in recentChats" :key="title" class="chat-recent-item">{{ title }}</div>
                 </div>
-            </div>
 
-            <div class="chat-main">
-                <template v-if="chatMessages.length === 0">
-                    <div class="chat-greeting">Hey there,</div>
-                </template>
-
-                <div v-else class="chat-thread" ref="chatThread">
-                    <div
-                        v-for="(msg, index) in chatMessages"
-                        :key="index"
-                        :class="['chat-bubble', msg.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--ai']"
-                    >
-                        <pre v-if="msg.role === 'ai'" class="chat-code">{{ msg.text }}</pre>
-                        <span v-else>{{ msg.text }}</span>
-                    </div>
-
-                    <div v-if="aiTyping" class="chat-bubble chat-bubble--ai chat-bubble--typing">
-                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <div class="chat-account">
+                    <span class="chat-account-avatar">U</span>
+                    <div>
+                        <div>User</div>
+                        <div class="chat-account-plan">Free plan</div>
                     </div>
                 </div>
+            </aside>
 
-                <div class="chat-input-box">
-                    <textarea
-                        v-model="chatInput"
-                        class="chat-input-field"
-                        placeholder="How can I help you today?"
-                        rows="1"
-                        @keydown.enter.exact.prevent="sendChatMessage"
-                    ></textarea>
-                    <div class="chat-input-toolbar">
-                        <v-icon size="18">mdi-plus</v-icon>
-                        <span class="chat-toolbar-chip">Chat</span>
-                        <span class="chat-toolbar-chip chat-toolbar-chip--muted">Cowork</span>
-                        <v-spacer />
-                        <v-btn
-                            icon="mdi-send"
-                            size="small"
-                            variant="text"
-                            :disabled="!chatInput.trim() || aiTyping"
-                            @click="sendChatMessage"
-                        />
+            <div class="chat-scrim" @click="chatMenuOpen = false"></div>
+
+            <main class="chat-main">
+                <header class="chat-topbar">
+                    <button class="chat-icon-btn chat-menu-btn" aria-label="Open menu" @click="chatMenuOpen = true">
+                        <v-icon size="22">mdi-menu</v-icon>
+                    </button>
+                    <div class="chat-model">
+                        Diwa 2
+                        <v-icon size="18">mdi-chevron-down</v-icon>
+                    </div>
+                    <div class="chat-topbar-spacer"></div>
+                    <button class="chat-icon-btn" title="Share" aria-label="Share">
+                        <v-icon size="20">mdi-export-variant</v-icon>
+                    </button>
+                </header>
+
+                <div class="chat-body" ref="chatThread">
+                    <div v-if="chatMessages.length === 0" class="chat-welcome">
+                        <span class="brand-mark brand-mark--lg" aria-hidden="true"></span>
+                        <h2 class="chat-greeting">What are we working on today?</h2>
+                        <div class="chat-suggestions">
+                            <button
+                                v-for="suggestion in chatSuggestions"
+                                :key="suggestion.label"
+                                class="chat-suggestion"
+                                @click="sendChatMessage(suggestion.prompt)"
+                            >
+                                <v-icon size="18">{{ suggestion.icon }}</v-icon>
+                                {{ suggestion.label }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-else class="chat-thread">
+                        <template v-for="(msg, index) in chatMessages" :key="index">
+                            <div v-if="msg.role === 'user'" class="chat-msg--user">{{ msg.text }}</div>
+
+                            <div v-else class="chat-msg--ai">
+                                <span class="brand-mark brand-mark--sm" aria-hidden="true"></span>
+                                <div class="chat-ai-content">
+                                    <p class="chat-ai-intro">{{ msg.intro }}</p>
+                                    <div class="chat-codeblock">
+                                        <div class="chat-codeblock-head">
+                                            <span>{{ msg.lang }}</span>
+                                            <button class="chat-copy-btn" @click="copyCode(index)">
+                                                <v-icon size="14">{{ copiedIndex === index ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+                                                {{ copiedIndex === index ? 'Copied' : 'Copy' }}
+                                            </button>
+                                        </div>
+                                        <pre class="chat-code">{{ msg.text }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div v-if="aiThinking" class="chat-msg--ai">
+                            <span class="brand-mark brand-mark--sm brand-mark--thinking" aria-hidden="true"></span>
+                            <span class="chat-thinking">Thinking…</span>
+                        </div>
                     </div>
                 </div>
 
-                <div v-if="chatMessages.length === 0" class="chat-quick-actions">
-                    <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-pencil-outline</v-icon> Write</span>
-                    <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-school-outline</v-icon> Learn</span>
-                    <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-code-tags</v-icon> Code</span>
-                    <span class="chat-quick-chip"><v-icon size="16" class="mr-1">mdi-coffee-outline</v-icon> Life stuff</span>
+                <div class="chat-composer-wrap">
+                    <div class="chat-composer">
+                        <textarea
+                            ref="composer"
+                            v-model="chatInput"
+                            class="chat-input-field"
+                            placeholder="Ask Diwa anything"
+                            rows="1"
+                            @input="autoGrowComposer"
+                            @keydown.enter.exact.prevent="sendChatMessage()"
+                        ></textarea>
+                        <div class="chat-composer-bar">
+                            <button class="chat-icon-btn" title="Attach file" aria-label="Attach file">
+                                <v-icon size="20">mdi-paperclip</v-icon>
+                            </button>
+                            <div class="chat-topbar-spacer"></div>
+                            <button
+                                class="chat-send-btn"
+                                aria-label="Send message"
+                                :disabled="!chatInput.trim() || aiTyping"
+                                @click="sendChatMessage()"
+                            >
+                                <v-icon size="18">mdi-arrow-up</v-icon>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chat-disclaimer">Diwa can make mistakes. Check important info.</div>
                 </div>
-            </div>
+            </main>
         </div>
-
 
         <!-- SEARCH -->
         <div class="search-strip">
@@ -137,10 +188,11 @@
                 :class="{
                     'player-host--floating': isFloating,
                     'player-host--theater': theaterMode && !isFloating,
+                    'player-host--dragging': drag || resize,
                 }"
                 :style="isFloating ? floatStyle : {}"
             >
-                <div v-if="isFloating" class="float-header" @mousedown="startDrag">
+                <div v-if="isFloating" class="float-header" @pointerdown="startDrag">
                     <span class="float-title">{{ displayTitle || 'Now Playing' }}</span>
                     <div class="float-actions">
                         <v-btn icon="mdi-close" size="x-small" variant="text" title="Back to normal view" @click="closeFloating" />
@@ -156,9 +208,20 @@
                         allowfullscreen
                         class="player-frame"
                     ></iframe>
+
+                    <!-- Sits below YouTube's own top-right icons so it doesn't cover them -->
+                    <button
+                        v-if="!isFloating"
+                        class="player-popout-btn"
+                        title="Pop out to floating window"
+                        aria-label="Pop out to floating window"
+                        @click="openFloating"
+                    >
+                        <v-icon size="20">mdi-picture-in-picture-bottom-right</v-icon>
+                    </button>
                 </div>
 
-                <div v-if="isFloating" class="float-resize-handle" @mousedown="startResize"></div>
+                <div v-if="isFloating" class="float-resize-handle" @pointerdown="startResize"></div>
             </div>
 
             <!-- VIDEO INFO -->
@@ -504,7 +567,33 @@ export default {
             chatMode: false,
             chatInput: "",
             chatMessages: [],
-            aiTyping: false,
+            aiTyping: false, // true from send until the reply finishes streaming
+            aiThinking: false, // true only while the "Thinking…" indicator shows
+            chatMenuOpen: false,
+            copiedIndex: null,
+            recentChats: [
+                "Attendance CSV export bug",
+                "Monthly report SQL join",
+                "Laravel form request rules",
+                "Vue table pagination",
+                "Refactor API controller",
+                "Debounce search input",
+                "Docker build for Laravel",
+                "Fix N+1 in employee list",
+            ],
+            chatSuggestions: [
+                { icon: "mdi-code-tags", label: "Write a function", prompt: "Write a function that formats a date like Oct 19, 2026" },
+                { icon: "mdi-bug-outline", label: "Debug my code", prompt: "Why doesn't my Vue list update after I change the array?" },
+                { icon: "mdi-database-outline", label: "Write a SQL query", prompt: "Write a SQL query that counts orders per user" },
+                { icon: "mdi-lightbulb-outline", label: "Explain a concept", prompt: "Explain debounce vs throttle with an example" },
+            ],
+            replyIntros: [
+                "Here's one way to do it:",
+                "Sure. Here's an example you can adapt:",
+                "This should work for your case:",
+                "Try this approach:",
+                "Here's a cleaner version:",
+            ],
             codeSnippets: [
                 `import axios from "axios";
 export default {
@@ -977,9 +1066,21 @@ async fetchDurations(videoList) {
         // },
 
         openFloating() {
+            // Phones get a smaller window so the chat stays usable.
+            if (window.innerWidth < 768) {
+                const w = Math.min(240, window.innerWidth - 32);
+                this.floatSize = { w, h: Math.round((w * 9) / 16) + 32 };
+            } else {
+                this.floatSize = {
+                    w: Math.min(this.floatSize.w, window.innerWidth - 48),
+                    h: Math.min(this.floatSize.h, window.innerHeight - 96),
+                };
+            }
+
+            // Top-right, under the chat top bar, so it never covers the message box.
             this.floatPos = {
                 x: Math.max(16, window.innerWidth - this.floatSize.w - 24),
-                y: Math.max(16, window.innerHeight - this.floatSize.h - 24),
+                y: 64,
             };
             this.isFloating = true;
             this.chatMode = true;
@@ -988,6 +1089,7 @@ async fetchDurations(videoList) {
         closeFloating() {
             this.isFloating = false;
             this.chatMode = false;
+            this.chatMenuOpen = false;
         },
 
         expandDescription() {
@@ -1013,22 +1115,121 @@ async fetchDurations(videoList) {
             this.toggleTheater();
         },
 
-        sendChatMessage() {
-            const text = this.chatInput.trim();
+        // Accepts a suggestion prompt; otherwise sends what's in the composer.
+        sendChatMessage(prompt) {
+            const text = (typeof prompt === "string" ? prompt : this.chatInput).trim();
             if (!text || this.aiTyping) return;
 
             this.chatMessages.push({ role: "user", text });
             this.chatInput = "";
+            this.resetComposerHeight();
             this.aiTyping = true;
+            this.aiThinking = true;
             this.scrollChatToBottom();
 
-            const delay = 1000 + Math.random() * 1000;
-            setTimeout(() => {
-                const snippet = this.codeSnippets[Math.floor(Math.random() * this.codeSnippets.length)];
-                this.chatMessages.push({ role: "ai", text: snippet });
+            const delay = 700 + Math.random() * 900;
+            this._replyTimer = setTimeout(() => {
+                const code = this.pickSnippet(text);
+                const intro = this.replyIntros[Math.floor(Math.random() * this.replyIntros.length)];
+                this.aiThinking = false;
+                this.chatMessages.push({
+                    role: "ai",
+                    intro,
+                    lang: this.detectLanguage(code),
+                    full: code,
+                    text: "",
+                });
+                this.streamReply(this.chatMessages.length - 1);
+            }, delay);
+        },
+
+        // Types the code out gradually, like a real AI reply.
+        streamReply(index) {
+            const msg = this.chatMessages[index];
+            const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+            if (reduceMotion) {
+                msg.text = msg.full;
                 this.aiTyping = false;
                 this.scrollChatToBottom();
-            }, delay);
+                return;
+            }
+
+            const step = Math.max(2, Math.ceil(msg.full.length / 90));
+            this._streamTimer = setInterval(() => {
+                msg.text = msg.full.slice(0, msg.text.length + step);
+                this.scrollChatToBottom();
+                if (msg.text.length >= msg.full.length) {
+                    clearInterval(this._streamTimer);
+                    this._streamTimer = null;
+                    this.aiTyping = false;
+                }
+            }, 16);
+        },
+
+        // Answer SQL questions with SQL, Laravel questions with PHP, etc.
+        pickSnippet(question) {
+            const q = question.toLowerCase();
+            let wanted = null;
+            if (/sql|query|database|join/.test(q)) wanted = "SQL";
+            else if (/php|laravel|controller|eloquent/.test(q)) wanted = "PHP";
+            else if (/python/.test(q)) wanted = "Python";
+            else if (/vue|javascript|js|react|function|debounce|array/.test(q)) wanted = "JavaScript";
+
+            const matches = wanted
+                ? this.codeSnippets.filter((code) => this.detectLanguage(code) === wanted)
+                : [];
+            const pool = matches.length ? matches : this.codeSnippets;
+            return pool[Math.floor(Math.random() * pool.length)];
+        },
+
+        detectLanguage(code) {
+            if (/^<\?php|public function|\$this->/.test(code)) return "PHP";
+            if (/^\s*(SELECT|INSERT|UPDATE|DELETE)\b/i.test(code)) return "SQL";
+            if (/^\s*def\s/m.test(code)) return "Python";
+            return "JavaScript";
+        },
+
+        async copyCode(index) {
+            const msg = this.chatMessages[index];
+            try {
+                await navigator.clipboard.writeText(msg.full);
+            } catch (e) {
+                // clipboard blocked — still show feedback so it looks normal
+            }
+            this.copiedIndex = index;
+            clearTimeout(this._copyTimer);
+            this._copyTimer = setTimeout(() => {
+                this.copiedIndex = null;
+            }, 1500);
+        },
+
+        startNewChat() {
+            this.clearChatTimers();
+            this.chatMessages = [];
+            this.chatInput = "";
+            this.aiTyping = false;
+            this.aiThinking = false;
+            this.chatMenuOpen = false;
+            this.resetComposerHeight();
+        },
+
+        clearChatTimers() {
+            clearTimeout(this._replyTimer);
+            clearInterval(this._streamTimer);
+            clearTimeout(this._copyTimer);
+            this._streamTimer = null;
+        },
+
+        autoGrowComposer(event) {
+            const el = event.target;
+            el.style.height = "auto";
+            el.style.height = Math.min(el.scrollHeight, 200) + "px";
+        },
+
+        resetComposerHeight() {
+            const el = this.$refs.composer;
+            if (el) el.style.height = "";
         },
 
         scrollChatToBottom() {
@@ -1039,14 +1240,17 @@ async fetchDurations(videoList) {
         },
 
         startDrag(event) {
+            if (event.target.closest("button")) return; // let the close button click
+            event.preventDefault();
             this.drag = {
                 startX: event.clientX,
                 startY: event.clientY,
                 origX: this.floatPos.x,
                 origY: this.floatPos.y,
             };
-            window.addEventListener("mousemove", this.onDrag);
-            window.addEventListener("mouseup", this.stopDrag);
+            window.addEventListener("pointermove", this.onDrag);
+            window.addEventListener("pointerup", this.stopDrag);
+            window.addEventListener("pointercancel", this.stopDrag);
         },
 
         onDrag(event) {
@@ -1065,20 +1269,23 @@ async fetchDurations(videoList) {
 
         stopDrag() {
             this.drag = null;
-            window.removeEventListener("mousemove", this.onDrag);
-            window.removeEventListener("mouseup", this.stopDrag);
+            window.removeEventListener("pointermove", this.onDrag);
+            window.removeEventListener("pointerup", this.stopDrag);
+            window.removeEventListener("pointercancel", this.stopDrag);
         },
 
         startResize(event) {
             event.stopPropagation();
+            event.preventDefault();
             this.resize = {
                 startX: event.clientX,
                 startY: event.clientY,
                 origW: this.floatSize.w,
                 origH: this.floatSize.h,
             };
-            window.addEventListener("mousemove", this.onResize);
-            window.addEventListener("mouseup", this.stopResize);
+            window.addEventListener("pointermove", this.onResize);
+            window.addEventListener("pointerup", this.stopResize);
+            window.addEventListener("pointercancel", this.stopResize);
         },
 
         onResize(event) {
@@ -1094,8 +1301,9 @@ async fetchDurations(videoList) {
 
         stopResize() {
             this.resize = null;
-            window.removeEventListener("mousemove", this.onResize);
-            window.removeEventListener("mouseup", this.stopResize);
+            window.removeEventListener("pointermove", this.onResize);
+            window.removeEventListener("pointerup", this.stopResize);
+            window.removeEventListener("pointercancel", this.stopResize);
         },
         
     },
@@ -1109,10 +1317,9 @@ async fetchDurations(videoList) {
     beforeUnmount() {
         window.removeEventListener("keydown", this.onGlobalKeydown);
         document.documentElement.style.overflow = "";
-        window.removeEventListener("mousemove", this.onDrag);
-        window.removeEventListener("mouseup", this.stopDrag);
-        window.removeEventListener("mousemove", this.onResize);
-        window.removeEventListener("mouseup", this.stopResize);
+        this.stopDrag();
+        this.stopResize();
+        this.clearChatTimers();
     },
 };
 </script>
@@ -1365,7 +1572,38 @@ async fetchDurations(videoList) {
     border: 0;
 }
 
+.player-popout-btn {
+    position: absolute;
+    top: 64px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    cursor: pointer;
+}
+
+.player-popout-btn:hover {
+    background-color: rgba(0, 0, 0, 0.85);
+}
+
+.player-popout-btn:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 2px;
+}
+
+/* While dragging/resizing, stop the iframe from swallowing the pointer */
+.player-host--dragging .player-frame {
+    pointer-events: none;
+}
+
 .float-header {
+    touch-action: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1395,9 +1633,10 @@ async fetchDurations(videoList) {
     position: absolute;
     right: 0;
     bottom: 0;
-    width: 16px;
-    height: 16px;
+    width: 24px;
+    height: 24px;
     cursor: nwse-resize;
+    touch-action: none;
 }
 
 .float-resize-handle::after {
@@ -1811,226 +2050,534 @@ async fetchDurations(videoList) {
     }
 }
 
-/* ===== CHAT MODE OVERLAY ===== */
+/* ===== CHAT MODE OVERLAY ("Diwa") ===== */
 .chat-overlay {
     position: fixed;
     inset: 0;
     z-index: 2000;
     display: flex;
-    background-color: #000000;
-    color: #e5e5e5;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: #0e0f11;
+    color: #e8e8ea;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-.chat-sidebar {
-    width: 260px;
+.chat-icon-btn {
+    width: 36px;
+    height: 36px;
     flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 14px;
-    border-right: 1px solid #2a2a2a;
-}
-
-.chat-sidebar-brand {
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin-bottom: 18px;
-    color: #ffffff;
-}
-
-.chat-sidebar-item {
-    display: flex;
-    align-items: center;
-    padding: 8px 10px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    border: none;
     border-radius: 8px;
-    font-size: 0.85rem;
-    color: #d4d4d4;
+    color: #c9cad0;
     cursor: pointer;
 }
 
-.chat-sidebar-item--active {
-    background-color: #262626;
-    color: #ffffff;
+.chat-icon-btn:hover {
+    background-color: #1f2126;
 }
 
-.chat-sidebar-item--muted {
-    color: #8a8a8a;
-    padding-left: 10px;
+/* Brand mark: teal-to-blue tile with an open ring */
+.brand-mark {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #0d9488, #2563eb);
 }
 
-.chat-sidebar-item:hover {
-    background-color: #1c1c1c;
+.brand-mark::after {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 2.5px solid #fff;
+    border-right-color: transparent;
+    border-radius: 50%;
+    transform: rotate(-45deg);
 }
 
-.chat-sidebar-label {
-    font-size: 0.72rem;
-    color: #7a7a7a;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0 10px;
+.brand-mark--sm {
+    width: 26px;
+    height: 26px;
+    margin-top: 2px;
 }
 
-.chat-sidebar-footer {
+.brand-mark--lg {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+}
+
+.brand-mark--lg::after {
+    inset: 13px;
+    border-width: 4px;
+}
+
+.brand-mark--thinking::after {
+    animation: brand-spin 0.9s linear infinite;
+}
+
+@keyframes brand-spin {
+    to { transform: rotate(315deg); }
+}
+
+/* Sidebar */
+.chat-sidebar {
+    width: 272px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 12px;
+    background-color: #16171a;
+    border-right: 1px solid #24262b;
+}
+
+.chat-brand {
     display: flex;
     align-items: center;
-    font-size: 0.8rem;
-    color: #b5b5b5;
-    padding: 10px;
-    border-top: 1px solid #2a2a2a;
+    gap: 10px;
+    padding: 4px 6px 16px;
 }
 
+.brand-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.chat-sidebar-close {
+    display: none;
+    margin-left: auto;
+}
+
+.chat-new-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 12px;
+    background-color: #1d1f24;
+    border: 1px solid #2c2f36;
+    border-radius: 10px;
+    color: #f2f2f3;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chat-new-btn:hover {
+    background-color: #24272d;
+}
+
+.chat-nav {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+}
+
+.chat-nav-item,
+.chat-recent-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.chat-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #c9cad0;
+}
+
+.chat-recent-item {
+    color: #a9abb3;
+}
+
+.chat-nav-item:hover,
+.chat-recent-item:hover {
+    background-color: #1f2126;
+}
+
+.chat-recent-label {
+    margin: 18px 12px 6px;
+    color: #7d808a;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.chat-recent {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.chat-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 8px 2px;
+    border-top: 1px solid #24262b;
+    font-size: 14px;
+}
+
+.chat-account-avatar {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background-color: #2563eb;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.chat-account-plan {
+    color: #7d808a;
+    font-size: 12px;
+}
+
+.chat-scrim {
+    display: none;
+}
+
+/* Main column */
 .chat-main {
     flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 56px;
+    padding: 0 12px;
+}
+
+.chat-menu-btn {
+    display: none;
+}
+
+.chat-model {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chat-model:hover {
+    background-color: #1f2126;
+}
+
+.chat-topbar-spacer {
+    flex: 1 1 auto;
+}
+
+.chat-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.chat-welcome {
+    width: min(100%, 720px);
+    margin: auto;
+    padding: 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 20px;
-    padding: 24px;
-    min-height: 0;
+    text-align: center;
+}
+
+.chat-greeting {
+    margin: 0;
+    color: #f4f4f5;
+    font-size: 28px;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.chat-suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
     width: 100%;
-    max-width: 720px;
-    margin: 0 auto;
+    max-width: 560px;
+}
+
+.chat-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid #2c2f36;
+    border-radius: 12px;
+    color: #d6d7dc;
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.chat-suggestion:hover {
+    background-color: #1a1c20;
 }
 
 .chat-thread {
-    flex: 1 1 auto;
-    width: 100%;
-    max-width: 640px;
-    overflow-y: auto;
+    width: min(100%, 760px);
+    margin: 0 auto;
+    padding: 16px 20px 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 8px 4px;
+    gap: 24px;
 }
 
-.chat-bubble {
-    max-width: 85%;
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-size: 0.88rem;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.chat-bubble--user {
+.chat-msg--user {
     align-self: flex-end;
-    background-color: #2a2a2a;
-    color: #f2f2f2;
+    max-width: 80%;
+    padding: 10px 16px;
+    border-radius: 18px;
+    background-color: #24262b;
+    color: #f2f2f3;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
-.chat-bubble--ai {
-    align-self: flex-start;
-    background-color: #171717;
-    border: 1px solid #2a2a2a;
-    color: #d4d4d4;
+.chat-msg--ai {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.chat-ai-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.chat-ai-intro {
+    margin: 2px 0 10px;
+    color: #e4e4e7;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.chat-codeblock {
+    overflow: hidden;
+    background-color: #121316;
+    border: 1px solid #2c2f36;
+    border-radius: 10px;
+}
+
+.chat-codeblock-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px 6px 14px;
+    background-color: #1a1c20;
+    color: #9a9ca5;
+    font-size: 12px;
+}
+
+.chat-copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #9a9ca5;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chat-copy-btn:hover {
+    background-color: #24262b;
+    color: #e4e4e7;
 }
 
 .chat-code {
     margin: 0;
-    font-family: 'Courier New', monospace;
-    font-size: 0.82rem;
-    white-space: pre;
-    overflow-x: auto;
-}
-
-.chat-bubble--typing {
-    display: flex;
-    align-items: center;
-    gap: 4px;
     padding: 14px;
+    overflow-x: auto;
+    color: #d4d4d8;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre;
 }
 
-.chat-bubble--typing .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background-color: #8a8a8a;
-    animation: chat-dot-bounce 1.2s infinite ease-in-out;
+.chat-thinking {
+    margin-top: 4px;
+    color: #9a9ca5;
+    font-size: 14px;
 }
 
-.chat-bubble--typing .dot:nth-child(2) { animation-delay: 0.15s; }
-.chat-bubble--typing .dot:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes chat-dot-bounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-    30% { transform: translateY(-4px); opacity: 1; }
+/* Composer */
+.chat-composer-wrap {
+    flex: 0 0 auto;
+    width: min(100%, 760px);
+    margin: 0 auto;
+    padding: 8px 20px 14px;
 }
 
-.chat-greeting {
-    font-size: 2.4rem;
-    font-family: 'Georgia', serif;
-    background-color: #1c1c1c;
-    padding: 12px 24px;
-    border-radius: 6px;
-    color: #f2f2f2;
+.chat-composer {
+    padding: 12px 12px 8px 16px;
+    background-color: #16171a;
+    border: 1px solid #2c2f36;
+    border-radius: 20px;
 }
 
-.chat-input-box {
-    width: min(100%, 640px);
-    background-color: #171717;
-    border: 1px solid #2a2a2a;
-    border-radius: 16px;
-    padding: 18px 20px;
-}
-
-.chat-input-placeholder {
-    color: #8a8a8a;
-    font-size: 0.95rem;
-    margin-bottom: 18px;
+.chat-composer:focus-within {
+    border-color: #3f434d;
 }
 
 .chat-input-field {
     width: 100%;
+    max-height: 200px;
     background: transparent;
     border: none;
     outline: none;
     resize: none;
-    color: #f2f2f2;
-    font-size: 0.95rem;
+    color: #f2f2f3;
     font-family: inherit;
-    margin-bottom: 18px;
+    font-size: 15px;
+    line-height: 1.5;
 }
 
 .chat-input-field::placeholder {
-    color: #8a8a8a;
+    color: #7d808a;
 }
 
-.chat-input-toolbar {
+.chat-composer-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    color: #b5b5b5;
+    gap: 6px;
+    margin-top: 6px;
 }
 
-.chat-toolbar-chip {
-    background-color: #2a2a2a;
-    border-radius: 8px;
-    padding: 4px 12px;
-    font-size: 0.8rem;
+.chat-send-btn {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background-color: #f2f2f3;
+    border: none;
+    border-radius: 50%;
+    color: #0e0f11;
+    cursor: pointer;
 }
 
-.chat-toolbar-chip--muted {
-    background-color: transparent;
-    color: #8a8a8a;
-}
-
-.chat-quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
-}
-
-.chat-quick-chip {
-    display: flex;
-    align-items: center;
-    background-color: #1c1c1c;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 0.85rem;
-    color: #d4d4d4;
+.chat-send-btn:disabled {
+    background-color: #2c2f36;
+    color: #6b6e77;
     cursor: default;
+}
+
+.chat-disclaimer {
+    margin-top: 8px;
+    color: #7d808a;
+    font-size: 12px;
+    text-align: center;
+}
+
+.chat-icon-btn:focus-visible,
+.chat-new-btn:focus-visible,
+.chat-suggestion:focus-visible,
+.chat-copy-btn:focus-visible,
+.chat-send-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* Phone: sidebar becomes a slide-in drawer */
+@media (max-width: 768px) {
+    .chat-sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 2;
+        width: min(84vw, 300px);
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+    .chat-overlay--menu-open .chat-sidebar {
+        transform: none;
+    }
+
+    .chat-scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        background-color: rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .chat-overlay--menu-open .chat-scrim {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .chat-menu-btn,
+    .chat-sidebar-close {
+        display: grid;
+    }
+
+    .chat-greeting {
+        font-size: 22px;
+    }
+
+    .chat-suggestions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .chat-thread,
+    .chat-composer-wrap {
+        padding-inline: 12px;
+    }
+
+    .chat-msg--user {
+        max-width: 88%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-sidebar,
+    .chat-scrim {
+        transition: none;
+    }
+
+    .brand-mark--thinking::after {
+        animation: none;
+    }
 }
 </style>
