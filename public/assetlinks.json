@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.onrender.watch_alg0.twa",
+        "sha256_cert_fingerprints": ["9E:70:32:D7:F8:90:CB:0A:25:53:7C:08:95:BD:95:E1:9E:E9:55:CA:13:ED:F1:0D:00:91:5B:C1:F7:10:D6:78"]
+      }
+    }]
