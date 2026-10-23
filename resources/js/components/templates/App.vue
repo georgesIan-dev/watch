@@ -4,7 +4,7 @@
             <!-- <v-app-bar-nav-icon @click.stop="drawer = !drawer" /> -->
 
             <v-icon icon="mdi-monitor-eye" color="primary" class="mx-2" />
-            <span class="text-subtitle-1 font-weight-bold">Monitoring System</span>
+            <span class="text-subtitle-1 font-weight-bold">Anak ng Teteng TV</span>
 
             <v-spacer />
 
