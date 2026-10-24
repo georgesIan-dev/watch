@@ -14,11 +14,11 @@
             <!-- Avatar: also refreshes the page -->
             <v-btn icon variant="text" aria-label="Refresh" title="Refresh" @click="refreshHome">
                 <v-avatar size="36" class="header-avatar">
-                    <img src="/jalibi.png" alt="" class="header-avatar__img" />
+                    <img :src="avatarSrc" alt="" class="header-avatar__img" />
                 </v-avatar>
             </v-btn>
         </v-app-bar>
-//
+
         <!-- <v-navigation-drawer v-model="drawer" temporary color="surface" width="260">
             <v-list nav class="pa-2">
                 <v-list-item
@@ -46,6 +46,9 @@ export default {
 
     data: () => ({
         drawer: false,
+        // Bound with :src on purpose: a static src="/..." makes Vite try to bundle it,
+        // and laravel-vite-plugin has no public dir, so the build fails.
+        avatarSrc: '/jalibi.png',
         navItems: [
             // { title: 'Home', path: '/', icon: 'mdi-home-variant' },
             { title: 'Company', path: '/company', icon: 'mdi-domain' },
