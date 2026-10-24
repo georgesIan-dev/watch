@@ -26,6 +26,7 @@ Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
 Route::get('/youtube/live', [Youtubecontroller::class, 'live']);
 Route::get('/youtube/video', [Youtubecontroller::class, 'details']);
 Route::get('/youtube/related', [Youtubecontroller::class, 'related']);
+Route::get('/youtube/comments', [Youtubecontroller::class, 'comments']);
 
 // MangaDex Manhwa Proxy Route
 Route::get('/manhwa', function () {

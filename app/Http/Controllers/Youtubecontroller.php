@@ -11,6 +11,7 @@ class Youtubecontroller extends Controller
 {
     private const SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search';
     private const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+    private const COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/commentThreads';
 
     // Related lists are cached per video so replaying a video costs no quota
     private const RELATED_CACHE_SECONDS = 6 * 60 * 60;
@@ -107,7 +108,8 @@ class Youtubecontroller extends Controller
         return [
             'ok' => false,
             'status' => $lastResponse ? $lastResponse->status() : 500,
-            'error' => $lastResponse ? ($lastResponse->json()['error']['message'] ?? 'Unknown Error') : 'No keys available'
+            'error' => $lastResponse ? ($lastResponse->json()['error']['message'] ?? 'Unknown Error') : 'No keys available',
+            'reason' => $lastResponse ? ($lastResponse->json()['error']['errors'][0]['reason'] ?? '') : '',
         ];
     }
 
@@ -224,6 +226,56 @@ class Youtubecontroller extends Controller
         Cache::put($cacheKey, $payload, self::RELATED_CACHE_SECONDS);
 
         return response()->json($payload);
+    }
+
+    /**
+     * Top-level comments of a video, 20 per page. Costs 1 quota unit per page.
+     */
+    public function comments(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{6,20}$/'],
+            'order' => 'nullable|in:relevance,time',
+            'pageToken' => 'nullable|string',
+        ]);
+
+        $result = $this->youtubeRequest(array_filter([
+            'part' => 'snippet',
+            'videoId' => $validated['id'],
+            'order' => $validated['order'] ?? 'relevance',
+            'maxResults' => 20,
+            'textFormat' => 'plainText', // plain text only, so nothing is rendered as HTML
+            'pageToken' => $validated['pageToken'] ?? null,
+        ]), self::COMMENT_THREADS_URL);
+
+        if (!$result['ok']) {
+            // Not an error for the user: the owner just turned comments off
+            if ($result['reason'] === 'commentsDisabled') {
+                return response()->json(['disabled' => true, 'items' => [], 'nextPageToken' => null]);
+            }
+            return response()->json(['message' => $result['error']], $result['status']);
+        }
+
+        $items = array_map(function ($thread) {
+            $comment = $thread['snippet']['topLevelComment']['snippet'] ?? [];
+
+            return [
+                'id' => $thread['id'],
+                'author' => $comment['authorDisplayName'] ?? '',
+                'authorImage' => $comment['authorProfileImageUrl'] ?? null,
+                'text' => $comment['textDisplay'] ?? '',
+                'likeCount' => $comment['likeCount'] ?? 0,
+                'publishedAt' => $comment['publishedAt'] ?? null,
+                'edited' => ($comment['updatedAt'] ?? null) !== ($comment['publishedAt'] ?? null),
+                'replyCount' => $thread['snippet']['totalReplyCount'] ?? 0,
+            ];
+        }, $result['data']['items'] ?? []);
+
+        return response()->json([
+            'disabled' => false,
+            'items' => $items,
+            'nextPageToken' => $result['data']['nextPageToken'] ?? null,
+        ]);
     }
 
     /**

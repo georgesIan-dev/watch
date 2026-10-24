@@ -300,6 +300,91 @@
                         </button>
                     </template>
                 </div>
+
+                <!-- COMMENTS -->
+                <section class="comments">
+                    <div class="comments-head">
+                        <h2 class="comments-title">{{ commentsHeading }}</h2>
+                        <div v-if="!commentsDisabled" class="chip-row">
+                            <button
+                                v-for="option in commentOrderOptions"
+                                :key="option.value"
+                                class="yt-chip"
+                                :class="{ 'yt-chip--active': commentOrder === option.value }"
+                                @click="setCommentOrder(option.value)"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="commentsDisabled" class="empty-text">Comments are turned off for this video.</div>
+
+                    <div v-else-if="loadingComments && comments.length === 0" class="d-flex justify-center pa-6">
+                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                    </div>
+
+                    <div v-else-if="commentsError && comments.length === 0" class="empty-text">
+                        Couldn't load comments.
+                        <button class="description-toggle" @click="fetchComments()">Try again</button>
+                    </div>
+
+                    <div v-else-if="comments.length === 0" class="empty-text">No comments yet.</div>
+
+                    <div v-else class="comment-list" :class="{ 'is-loading': loadingComments && !commentsNextPageToken }">
+                        <div v-for="comment in comments" :key="comment.id" class="comment">
+                            <img
+                                v-if="comment.authorImage"
+                                :src="comment.authorImage"
+                                alt=""
+                                class="comment-avatar"
+                                loading="lazy"
+                                referrerpolicy="no-referrer"
+                                @error="comment.authorImage = null"
+                            />
+                            <div v-else class="channel-avatar">{{ channelInitial(comment.author) }}</div>
+
+                            <div class="comment-body">
+                                <div class="comment-meta">
+                                    <span class="comment-author">{{ comment.author }}</span>
+                                    <span :title="formatDate(comment.publishedAt)">
+                                        {{ timeAgo(comment.publishedAt) }}{{ comment.edited ? ' (edited)' : '' }}
+                                    </span>
+                                </div>
+                                <div
+                                    class="comment-text"
+                                    :class="{ 'comment-text--clamped': !expandedComments[comment.id] }"
+                                >{{ comment.text }}</div>
+                                <button
+                                    v-if="isLongComment(comment.text)"
+                                    class="description-toggle"
+                                    @click="toggleComment(comment.id)"
+                                >
+                                    {{ expandedComments[comment.id] ? 'Show less' : 'Read more' }}
+                                </button>
+                                <div class="comment-stats">
+                                    <v-icon size="16">mdi-thumb-up-outline</v-icon>
+                                    <span v-if="comment.likeCount">{{ formatCount(comment.likeCount) }}</span>
+                                    <span v-if="comment.replyCount">
+                                        · {{ comment.replyCount }} {{ comment.replyCount === 1 ? 'reply' : 'replies' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto-loads on wide screens; on phones a button, so Related below stays reachable -->
+                    <div
+                        v-if="commentsNextPageToken && comments.length"
+                        v-intersect="{ handler: onCommentsEndVisible, options: { rootMargin: '0px 0px 400px 0px' } }"
+                        class="load-more-row mt-4"
+                    >
+                        <v-progress-circular v-if="loadingComments" indeterminate color="primary" size="28" />
+                        <button v-else-if="!wideLayout || commentsPaused" class="yt-pill" @click="loadMoreComments">
+                            Show more comments
+                        </button>
+                    </div>
+                </section>
             </section>
 
             <!-- SIDE: QUEUE + SEARCH RESULTS -->
@@ -612,6 +697,9 @@ function loadYouTubeIframeApi() {
 }
 const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 const YOUTUBE_RELATED_ENDPOINT = "/api/youtube/related";
+const YOUTUBE_COMMENTS_ENDPOINT = "/api/youtube/comments";
+// Same breakpoint as the single-column layout in the CSS below
+const WIDE_LAYOUT_QUERY = "(min-width: 961px)";
 const THEATER_STORAGE_KEY = "watchParty.theaterMode";
 
 // Remember theater mode between visits, like YouTube does.
@@ -645,6 +733,22 @@ export default {
             relatedResults: [],
             loadingRelated: false,
             sideTab: "related",
+            // comments of the playing video
+            comments: [],
+            commentsNextPageToken: null,
+            loadingComments: false,
+            commentsDisabled: false,
+            commentsError: false,
+            commentsPaused: false, // a page failed: stop auto-loading, show the button
+            commentsEndVisible: false,
+            commentsGeneration: 0, // drops late pages after switching video or sort order
+            commentOrder: "relevance",
+            commentOrderOptions: [
+                { value: "relevance", label: "Top" },
+                { value: "time", label: "Newest" },
+            ],
+            expandedComments: {},
+            wideLayout: true,
             sideTabs: [
                 { value: "related", label: "Related" },
                 { value: "search", label: "Search results" },
@@ -908,6 +1012,10 @@ console.log([1,2,3,4].filter(isEven));`,
         displayChannel() {
             return this.videoDetails?.channelTitle || this.currentChannelTitle;
         },
+        commentsHeading() {
+            const count = this.videoDetails?.commentCount;
+            return count ? `${Number(count).toLocaleString("en-US")} Comments` : "Comments";
+        },
         sideList() {
             return this.sideTab === "related" ? this.relatedResults : this.results;
         },
@@ -1132,6 +1240,85 @@ async fetchDurations(videoList) {
                 if (videoId === this.currentVideoId) this.loadingRelated = false;
             }
         },
+
+        // ===== COMMENTS =====
+        async fetchComments(loadMore = false) {
+            const videoId = this.currentVideoId;
+            if (!videoId) return;
+
+            if (loadMore) {
+                if (this.loadingComments || !this.commentsNextPageToken) return;
+            } else {
+                this.commentsGeneration++;
+                this.comments = [];
+                this.commentsNextPageToken = null;
+                this.commentsDisabled = false;
+                this.commentsPaused = false;
+                this.expandedComments = {};
+            }
+            const generation = this.commentsGeneration;
+            this.loadingComments = true;
+            this.commentsError = false;
+
+            try {
+                const { data } = await axios.get(YOUTUBE_COMMENTS_ENDPOINT, {
+                    params: {
+                        id: videoId,
+                        order: this.commentOrder,
+                        pageToken: loadMore ? this.commentsNextPageToken : undefined,
+                    },
+                });
+                if (generation !== this.commentsGeneration) return;
+
+                this.commentsDisabled = !!data.disabled;
+                this.comments = loadMore ? [...this.comments, ...data.items] : data.items;
+                this.commentsNextPageToken = data.nextPageToken || null;
+            } catch (error) {
+                if (generation !== this.commentsGeneration) return;
+                console.warn("Failed to fetch comments", error);
+                if (loadMore) this.commentsPaused = true;
+                else this.commentsError = true;
+            } finally {
+                if (generation === this.commentsGeneration) {
+                    this.loadingComments = false;
+                    this.$nextTick(this.maybeAutoLoadComments);
+                }
+            }
+        },
+
+        onCommentsEndVisible(isVisible) {
+            this.commentsEndVisible = isVisible;
+            this.maybeAutoLoadComments();
+        },
+
+        maybeAutoLoadComments() {
+            if (!this.commentsEndVisible || !this.wideLayout || this.commentsPaused) return;
+            if (this.loadingComments || !this.commentsNextPageToken) return;
+            this.fetchComments(true);
+        },
+
+        loadMoreComments() {
+            this.commentsPaused = false;
+            this.fetchComments(true);
+        },
+
+        setCommentOrder(order) {
+            if (order === this.commentOrder) return;
+            this.commentOrder = order;
+            this.fetchComments();
+        },
+
+        isLongComment(text) {
+            return text.length > 300 || text.split("\n").length > 4;
+        },
+
+        toggleComment(id) {
+            this.expandedComments = { ...this.expandedComments, [id]: !this.expandedComments[id] };
+        },
+
+        onLayoutChange(event) {
+            this.wideLayout = event.matches;
+        },
     async fetchVideoDetails(videoId) {
             this.videoDetails = null;
             this.loadingDetails = true;
@@ -1146,6 +1333,7 @@ async fetchDurations(videoList) {
                         publishedAt: item.snippet.publishedAt,
                         viewCount: item.statistics?.viewCount,
                         likeCount: item.statistics?.likeCount,
+                        commentCount: item.statistics?.commentCount,
                     };
                 }
             } catch (error) {
@@ -1336,6 +1524,8 @@ async fetchDurations(videoList) {
             this.fetchVideoDetails(video.videoId);
             this.sideTab = "related";
             this.fetchRelated(video.videoId);
+            this.commentOrder = "relevance";
+            this.fetchComments();
             window.scrollTo({ top: 0 });
         },
 
@@ -1614,12 +1804,17 @@ async fetchDurations(videoList) {
         this.fetchLiveVideos();
         this.searchVideos();
         window.addEventListener("keydown", this.onGlobalKeydown);
+
+        this._layoutQuery = window.matchMedia(WIDE_LAYOUT_QUERY);
+        this.wideLayout = this._layoutQuery.matches;
+        this._layoutQuery.addEventListener("change", this.onLayoutChange);
     },
 
     beforeUnmount() {
         this._unmounting = true; // stops a player that is still being created
         this.destroyPlayer();
         window.removeEventListener("keydown", this.onGlobalKeydown);
+        this._layoutQuery?.removeEventListener("change", this.onLayoutChange);
         document.documentElement.style.overflow = "";
         this.stopDrag();
         this.stopResize();
@@ -2113,6 +2308,89 @@ async fetchDurations(videoList) {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
+}
+
+/* ===== COMMENTS ===== */
+.comments {
+    margin-top: 24px;
+}
+
+.comments-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-bottom: 20px;
+}
+
+.comments-title {
+    margin: 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 700;
+}
+
+.comment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.comment {
+    display: flex;
+    gap: 12px;
+}
+
+.comment-avatar {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.comment-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.comment-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.comment-author {
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 600;
+}
+
+.comment-text {
+    margin-top: 2px;
+    font-size: 14px;
+    line-height: 20px;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.comment-text--clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.comment-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 12px;
 }
 
 /* ===== SIDE COLUMN ===== */
