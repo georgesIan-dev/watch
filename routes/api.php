@@ -25,6 +25,7 @@ Route::get('/youtube/durations', [Youtubecontroller::class, 'durations']);
 Route::get('/youtube/search', [Youtubecontroller::class, 'search']);
 Route::get('/youtube/live', [Youtubecontroller::class, 'live']);
 Route::get('/youtube/video', [Youtubecontroller::class, 'details']);
+Route::get('/youtube/related', [Youtubecontroller::class, 'related']);
 
 // MangaDex Manhwa Proxy Route
 Route::get('/manhwa', function () {
@@ -83,4 +84,3 @@ Route::get('/manhwa/cover/{mangaId}/{fileName}', function ($mangaId, $fileName) 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
-

@@ -340,19 +340,30 @@
                 </div>
 
                 <div>
-                    <div class="side-heading">Search results</div>
+                    <!-- Related (based on what's playing) vs. the user's own search -->
+                    <div class="chip-row side-tabs">
+                        <button
+                            v-for="tab in sideTabs"
+                            :key="tab.value"
+                            class="yt-chip"
+                            :class="{ 'yt-chip--active': sideTab === tab.value }"
+                            @click="sideTab = tab.value"
+                        >
+                            {{ tab.label }}
+                        </button>
+                    </div>
 
-                    <div v-if="loading && results.length === 0" class="d-flex justify-center pa-6">
+                    <div v-if="sideLoading && sideList.length === 0" class="d-flex justify-center pa-6">
                         <v-progress-circular indeterminate color="primary"></v-progress-circular>
                     </div>
 
-                    <div v-else-if="results.length === 0" class="empty-text">
-                        No results yet. Try searching for something above.
+                    <div v-else-if="sideList.length === 0" class="empty-text">
+                        {{ sideEmptyText }}
                     </div>
 
-                    <div v-else class="compact-list" :class="{ 'is-loading': loading }">
+                    <div v-else class="compact-list" :class="{ 'is-loading': sideTab === 'search' && loading }">
                         <div
-                            v-for="video in results"
+                            v-for="video in sideList"
                             :key="video.videoId"
                             class="compact-row"
                             :class="{
@@ -393,7 +404,7 @@
 
                     <!-- Infinite scroll: loads the next page when this row nears the viewport -->
                     <div
-                        v-if="nextPageToken && results.length"
+                        v-if="sideTab === 'search' && nextPageToken && results.length"
                         v-intersect="{ handler: onResultsEndVisible, options: { rootMargin: '0px 0px 600px 0px' } }"
                         class="load-more-row mt-4"
                     >
@@ -600,6 +611,7 @@ function loadYouTubeIframeApi() {
     return ytApiPromise;
 }
 const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
+const YOUTUBE_RELATED_ENDPOINT = "/api/youtube/related";
 const THEATER_STORAGE_KEY = "watchParty.theaterMode";
 
 // Remember theater mode between visits, like YouTube does.
@@ -629,6 +641,14 @@ export default {
             autoLoadPaused: false, // set after a failed page load so we don't retry in a loop
             searchGeneration: 0, // bumps on every new search so a late "load more" can't mix into new results
             blockedTooltip: "The owner turned off playback on other websites",
+            // related videos for whatever is playing (side column)
+            relatedResults: [],
+            loadingRelated: false,
+            sideTab: "related",
+            sideTabs: [
+                { value: "related", label: "Related" },
+                { value: "search", label: "Search results" },
+            ],
             // set when the player reports an error; shows our own overlay
             playerError: null,
             // true when the IFrame API can't load (e.g. www.youtube.com blocked by a proxy);
@@ -888,6 +908,17 @@ console.log([1,2,3,4].filter(isEven));`,
         displayChannel() {
             return this.videoDetails?.channelTitle || this.currentChannelTitle;
         },
+        sideList() {
+            return this.sideTab === "related" ? this.relatedResults : this.results;
+        },
+        sideLoading() {
+            return this.sideTab === "related" ? this.loadingRelated : this.loading;
+        },
+        sideEmptyText() {
+            return this.sideTab === "related"
+                ? "No related videos found."
+                : "No results yet. Try searching for something above.";
+        },
         floatStyle() {
             return {
                 top: this.floatPos.y + 'px',
@@ -961,6 +992,7 @@ async fetchDurations(videoList) {
         // videoList param sa ibang array reference (hindi direktang this.results),
         // hindi agad napapansin ang pagbabago kung hindi natin i-re-assign.
         this.results = [...this.results];
+        this.relatedResults = [...this.relatedResults];
     } catch (error) {
         console.warn("Failed to fetch durations", error);
     }
@@ -1061,10 +1093,44 @@ async fetchDurations(videoList) {
         },
 
         markNotEmbeddable(videoId) {
-            this.results.forEach((video) => {
+            [...this.results, ...this.relatedResults].forEach((video) => {
                 if (video.videoId === videoId) video.embeddable = false;
             });
             this.results = [...this.results];
+            this.relatedResults = [...this.relatedResults];
+        },
+
+        // Search API item -> the video shape the lists use
+        mapSearchItem(item) {
+            return {
+                videoId: item.id.videoId,
+                title: this.decodeHtml(item.snippet.title),
+                channelTitle: this.decodeHtml(item.snippet.channelTitle),
+                thumbnail: item.snippet.thumbnails?.medium?.url,
+                publishedAt: item.snippet.publishedAt,
+            };
+        },
+
+        async fetchRelated(videoId) {
+            this.relatedResults = [];
+            this.loadingRelated = true;
+            try {
+                const response = await axios.get(YOUTUBE_RELATED_ENDPOINT, { params: { id: videoId } });
+                if (videoId !== this.currentVideoId) return; // user already moved on to another video
+
+                const queued = new Set(this.queue.map((video) => video.videoId));
+                const mapped = (response.data.items || [])
+                    .filter((item) => item.id?.videoId && !queued.has(item.id.videoId))
+                    .map(this.mapSearchItem);
+
+                this.relatedResults = mapped;
+                this.fetchDurations(mapped);
+            } catch (error) {
+                // Quiet: the user can still switch to their search results
+                console.warn("Failed to fetch related videos", error);
+            } finally {
+                if (videoId === this.currentVideoId) this.loadingRelated = false;
+            }
         },
     async fetchVideoDetails(videoId) {
             this.videoDetails = null;
@@ -1191,6 +1257,8 @@ async fetchDurations(videoList) {
                 this.loading = true;
                 this.autoLoadPaused = false;
                 this.searchGeneration++;
+                // Typing a new search while watching: show those results in the side column
+                if (this.currentVideoId) this.sideTab = "search";
             }
             const generation = this.searchGeneration;
 
@@ -1206,13 +1274,7 @@ async fetchDurations(videoList) {
                 if (generation !== this.searchGeneration) return;
 
                 const items = response.data.items || [];
-                const mapped = items.map((item) => ({
-                    videoId: item.id.videoId,
-                    title: this.decodeHtml(item.snippet.title),
-                    channelTitle: this.decodeHtml(item.snippet.channelTitle),
-                    thumbnail: item.snippet.thumbnails?.medium?.url,
-                    publishedAt: item.snippet.publishedAt,
-                }));
+                const mapped = items.map(this.mapSearchItem);
 
                 if (!loadMore) {
                     this.results = mapped; // Dito lang natin palitan ang results
@@ -1255,6 +1317,7 @@ async fetchDurations(videoList) {
 
         maybeAutoLoad() {
             if (!this.resultsEndVisible || this.autoLoadPaused) return;
+            if (this.currentVideoId && this.sideTab !== "search") return;
             if (this.loading || this.loadingMore || !this.nextPageToken) return;
             this.searchVideos(true);
         },
@@ -1271,6 +1334,8 @@ async fetchDurations(videoList) {
             this.currentChannelTitle = video.channelTitle;
             this.showDescription = false;
             this.fetchVideoDetails(video.videoId);
+            this.sideTab = "related";
+            this.fetchRelated(video.videoId);
             window.scrollTo({ top: 0 });
         },
 
@@ -1278,6 +1343,7 @@ async fetchDurations(videoList) {
             if (video.embeddable === false) return;
             this.queue.push(video);
             this.results = this.results.filter((r) => r.videoId !== video.videoId);
+            this.relatedResults = this.relatedResults.filter((r) => r.videoId !== video.videoId);
         },
 
         removeFromQueue(index) {
@@ -2060,6 +2126,10 @@ async fetchDurations(videoList) {
 
 .watch-grid--theater .watch-side {
     padding-top: 12px;
+}
+
+.side-tabs {
+    margin-bottom: 12px;
 }
 
 .side-heading {
