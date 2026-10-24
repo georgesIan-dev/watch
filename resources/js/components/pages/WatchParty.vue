@@ -200,14 +200,24 @@
                 </div>
 
                 <div class="player-frame-wrap">
-                    <iframe
-                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
-                        title="YouTube video player"
-                        frameborder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowfullscreen
-                        class="player-frame"
-                    ></iframe>
+                    <!-- The YouTube IFrame API puts its iframe in here (see createPlayer) -->
+                    <div ref="playerSlot" class="player-frame"></div>
+
+                    <!-- Our own message instead of YouTube's "Video unavailable" screen -->
+                    <div v-if="playerError" class="player-error">
+                        <v-icon size="40" class="mb-3">mdi-cancel</v-icon>
+                        <div class="player-error-title">Can't play this video here</div>
+                        <div class="player-error-text">{{ playerError.message }}</div>
+                        <a
+                            class="yt-pill player-error-link"
+                            :href="`https://www.youtube.com/watch?v=${playerError.videoId}`"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            <v-icon size="18">mdi-open-in-new</v-icon>
+                            Watch on YouTube
+                        </a>
+                    </div>
 
                     <!-- Sits below YouTube's own top-right icons so it doesn't cover them -->
                     <button
@@ -335,9 +345,14 @@
                             v-for="video in results"
                             :key="video.videoId"
                             class="compact-row"
-                            :class="{ 'compact-row--active': video.videoId === currentVideoId }"
+                            :class="{
+                                'compact-row--active': video.videoId === currentVideoId,
+                                'is-blocked': video.embeddable === false,
+                            }"
                             role="button"
-                            tabindex="0"
+                            :tabindex="video.embeddable === false ? -1 : 0"
+                            :aria-disabled="video.embeddable === false"
+                            :title="video.embeddable === false ? blockedTooltip : undefined"
                             @click="playVideo(video)"
                             @keydown.enter="playVideo(video)"
                         >
@@ -350,8 +365,12 @@
                                 <div class="video-title video-title--compact">{{ video.title }}</div>
                                 <div class="video-sub">{{ video.channelTitle }}</div>
                                 <div class="video-sub" :title="formatDate(video.publishedAt)">{{ uploadedLabel(video.publishedAt) }}</div>
+                                <div v-if="video.embeddable === false" class="blocked-note">
+                                    <v-icon size="14">mdi-cancel</v-icon> Can't play here
+                                </div>
                             </div>
                             <button
+                                v-if="video.embeddable !== false"
                                 class="icon-btn row-action"
                                 title="Add to queue"
                                 aria-label="Add to queue"
@@ -480,8 +499,11 @@
                         v-for="video in results"
                         :key="video.videoId"
                         class="video-card"
+                        :class="{ 'is-blocked': video.embeddable === false }"
                         role="button"
-                        tabindex="0"
+                        :tabindex="video.embeddable === false ? -1 : 0"
+                        :aria-disabled="video.embeddable === false"
+                        :title="video.embeddable === false ? blockedTooltip : undefined"
                         @click="playVideo(video)"
                         @keydown.enter="playVideo(video)"
                     >
@@ -489,6 +511,7 @@
                             <v-img :src="video.thumbnail" aspect-ratio="1.7778" cover>
                                 <span v-if="video.duration" class="duration-badge">{{ video.duration }}</span>
                                 <button
+                                    v-if="video.embeddable !== false"
                                     class="icon-btn thumb-action"
                                     title="Add to queue"
                                     aria-label="Add to queue"
@@ -504,6 +527,9 @@
                                 <div class="video-title">{{ video.title }}</div>
                                 <div class="video-sub video-sub--lg">{{ video.channelTitle }}</div>
                                 <div class="video-sub video-sub--lg" :title="formatDate(video.publishedAt)">{{ uploadedLabel(video.publishedAt) }}</div>
+                                <div v-if="video.embeddable === false" class="blocked-note">
+                                    <v-icon size="14">mdi-cancel</v-icon> Can't play here
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -527,6 +553,35 @@
 <script>
 import axios from "axios";
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
+const YT_IFRAME_API_SRC = "https://www.youtube.com/iframe_api";
+
+// IFrame Player API error codes (https://developers.google.com/youtube/iframe_api_reference#onError)
+const YT_ERROR_NOT_FOUND = 100; // removed or private
+const YT_ERRORS_EMBED_BLOCKED = [101, 150]; // owner turned off playback on other websites
+
+// Load YouTube's IFrame API script once and share it between page visits.
+let ytApiPromise = null;
+function loadYouTubeIframeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (!ytApiPromise) {
+        ytApiPromise = new Promise((resolve, reject) => {
+            const previous = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => {
+                if (typeof previous === "function") previous();
+                resolve(window.YT);
+            };
+            const script = document.createElement("script");
+            script.src = YT_IFRAME_API_SRC;
+            script.async = true;
+            script.onerror = () => {
+                ytApiPromise = null; // allow a retry on the next video
+                reject(new Error("Failed to load the YouTube IFrame API"));
+            };
+            document.head.appendChild(script);
+        });
+    }
+    return ytApiPromise;
+}
 const YOUTUBE_LIVE_ENDPOINT = "/api/youtube/live";
 const THEATER_STORAGE_KEY = "watchParty.theaterMode";
 
@@ -556,6 +611,9 @@ export default {
             resultsEndVisible: false,
             autoLoadPaused: false, // set after a failed page load so we don't retry in a loop
             searchGeneration: 0, // bumps on every new search so a late "load more" can't mix into new results
+            blockedTooltip: "The owner turned off playback on other websites",
+            // set when the player reports an error; shows our own overlay
+            playerError: null,
             snackbar: {
                 show: false,
                 message: "",
@@ -837,6 +895,10 @@ console.log([1,2,3,4].filter(isEven));`,
                 this.searchVideos();
             }
         },
+        currentVideoId(videoId) {
+            this.playerError = null;
+            this.loadPlayer(videoId);
+        },
         // Hide the page scrollbar behind the full-screen chat overlay.
         chatMode(active) {
             document.documentElement.style.overflow = active ? "hidden" : "";
@@ -865,12 +927,15 @@ async fetchDurations(videoList) {
 
     try {
         const response = await axios.get("/api/youtube/durations", { params: { ids } });
-        const durations = response.data;
+        const { durations = {}, notEmbeddable = [] } = response.data;
+        const blocked = new Set(notEmbeddable);
 
         videoList.forEach((video) => {
             if (durations[video.videoId]) {
                 video.duration = this.parseDuration(durations[video.videoId]);
             }
+            // false = owner disabled embedding; the card is shown greyed out and can't be played
+            video.embeddable = !blocked.has(video.videoId);
         });
        // Dito na natin pinipilit mag-re-render si Vue — dahil galing ang
         // videoList param sa ibang array reference (hindi direktang this.results),
@@ -884,6 +949,99 @@ async fetchDurations(videoList) {
             this.snackbar.message = message;
             this.snackbar.color = "error";
             this.snackbar.show = true;
+        },
+
+        showInfo(message) {
+            this.snackbar.message = message;
+            this.snackbar.color = "info";
+            this.snackbar.show = true;
+        },
+
+        // ===== PLAYER (YouTube IFrame API) =====
+        // The player instance lives on this._ytPlayer (not in data) so Vue doesn't
+        // wrap YouTube's object in a reactive proxy.
+        loadPlayer(videoId) {
+            if (!videoId) return;
+            if (this._ytPlayer) {
+                // Before onReady the player can't take commands; onReady loads the latest video.
+                if (this._ytPlayerReady) this._ytPlayer.loadVideoById(videoId);
+                return;
+            }
+            this.createPlayer();
+        },
+
+        async createPlayer() {
+            if (this._ytPlayerCreating) return;
+            this._ytPlayerCreating = true;
+            try {
+                const YT = await loadYouTubeIframeApi();
+                await this.$nextTick(); // the player slot renders together with currentVideoId
+                const slot = this.$refs.playerSlot;
+                if (!slot || this._unmounting || this._ytPlayer) return;
+
+                // Give YouTube its own child element to replace, so it never swaps out a node Vue owns.
+                const mount = document.createElement("div");
+                slot.appendChild(mount);
+
+                const startId = this.currentVideoId;
+                this._ytPlayer = new YT.Player(mount, {
+                    host: "https://www.youtube-nocookie.com",
+                    videoId: startId,
+                    playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
+                    events: {
+                        onReady: (event) => {
+                            this._ytPlayerReady = true;
+                            // The user may have picked another video while the player was starting.
+                            if (this.currentVideoId && this.currentVideoId !== startId) {
+                                event.target.loadVideoById(this.currentVideoId);
+                            }
+                        },
+                        onError: (event) => this.onPlayerError(event.data),
+                    },
+                });
+            } catch (error) {
+                console.error("YouTube player error:", error);
+                this.showError("Couldn't load the YouTube player. Check your connection and try again.");
+            } finally {
+                this._ytPlayerCreating = false;
+            }
+        },
+
+        destroyPlayer() {
+            if (this._ytPlayer && typeof this._ytPlayer.destroy === "function") {
+                this._ytPlayer.destroy();
+            }
+            this._ytPlayer = null;
+            this._ytPlayerReady = false;
+        },
+
+        onPlayerError(code) {
+            const videoId = this.currentVideoId;
+            const embedBlocked = YT_ERRORS_EMBED_BLOCKED.includes(code);
+            const cantPlay = embedBlocked || code === YT_ERROR_NOT_FOUND;
+
+            // Grey it out in the results too, so it isn't picked again
+            if (embedBlocked) this.markNotEmbeddable(videoId);
+
+            // Something is queued: skip to it, like a playlist would
+            if (cantPlay && this.queue.length) {
+                const skippedTitle = this.displayTitle;
+                this.playFromQueue(0);
+                this.showInfo(`Skipped "${skippedTitle}" because it can't be played here.`);
+                return;
+            }
+
+            let message = "YouTube couldn't play this video.";
+            if (embedBlocked) message = "The owner turned off playback on other websites.";
+            else if (code === YT_ERROR_NOT_FOUND) message = "This video was removed or set to private.";
+            this.playerError = { code, videoId, message };
+        },
+
+        markNotEmbeddable(videoId) {
+            this.results.forEach((video) => {
+                if (video.videoId === videoId) video.embeddable = false;
+            });
+            this.results = [...this.results];
         },
     async fetchVideoDetails(videoId) {
             this.videoDetails = null;
@@ -1084,6 +1242,7 @@ async fetchDurations(videoList) {
         },
 
         playVideo(video) {
+            if (video.embeddable === false) return;
             this.currentVideoId = video.videoId;
             this.currentVideoTitle = video.title;
             this.currentChannelTitle = video.channelTitle;
@@ -1093,6 +1252,7 @@ async fetchDurations(videoList) {
         },
 
         addToQueue(video) {
+            if (video.embeddable === false) return;
             this.queue.push(video);
             this.results = this.results.filter((r) => r.videoId !== video.videoId);
         },
@@ -1368,6 +1528,8 @@ async fetchDurations(videoList) {
     },
 
     beforeUnmount() {
+        this._unmounting = true; // stops a player that is still being created
+        this.destroyPlayer();
         window.removeEventListener("keydown", this.onGlobalKeydown);
         document.documentElement.style.overflow = "";
         this.stopDrag();
@@ -1658,8 +1820,49 @@ async fetchDurations(videoList) {
 }
 
 /* While dragging/resizing, stop the iframe from swallowing the pointer */
+/* The IFrame API's iframe has no scoped attribute, hence :deep */
+.player-frame :deep(iframe) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
 .player-host--dragging .player-frame {
     pointer-events: none;
+}
+
+.player-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    background-color: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-on-surface));
+}
+
+.player-error-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.player-error-text {
+    max-width: 40ch;
+    margin-top: 6px;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 14px;
+}
+
+.player-error-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    text-decoration: none;
 }
 
 .float-header {
@@ -2021,6 +2224,28 @@ async fetchDurations(videoList) {
     top: 4px;
     left: 4px;
     font-weight: 700;
+}
+
+/* Video the owner won't let us embed: visible, but can't be played or queued */
+.compact-row.is-blocked,
+.video-card.is-blocked {
+    cursor: not-allowed;
+}
+
+.is-blocked .thumb,
+.is-blocked .video-title,
+.is-blocked .video-sub,
+.is-blocked .channel-avatar {
+    opacity: 0.4;
+}
+
+.blocked-note {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    color: rgb(var(--v-theme-on-surface-variant));
+    font-size: 12px;
 }
 
 /* Hover-only controls on mouse devices; always visible on touch */
