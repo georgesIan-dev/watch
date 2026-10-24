@@ -3,12 +3,20 @@
         <v-app-bar elevation="0" color="surface" height="64" class="px-2 border-b">
             <!-- <v-app-bar-nav-icon @click.stop="drawer = !drawer" /> -->
 
-            <v-icon icon="mdi-monitor-eye" color="primary" class="mx-2" />
-            <span class="text-subtitle-1 font-weight-bold">Anak ng Teteng TV</span>
+            <!-- Brand: click to go home and refresh, like the YouTube logo -->
+            <button type="button" class="brand-link" title="Refresh" @click="refreshHome">
+                <v-icon icon="mdi-monitor-eye" color="primary" class="mx-2" />
+                <span class="text-subtitle-1 font-weight-bold">Anak ng Teteng TV</span>
+            </button>
 
             <v-spacer />
 
-            <v-btn icon="mdi-logout-variant" variant="text" @click="logout" />
+            <!-- Avatar: also refreshes the page -->
+            <v-btn icon variant="text" aria-label="Refresh" title="Refresh" @click="refreshHome">
+                <v-avatar size="36" class="header-avatar">
+                    <img src="/jalibi.png" alt="" class="header-avatar__img" />
+                </v-avatar>
+            </v-btn>
         </v-app-bar>
 
         <!-- <v-navigation-drawer v-model="drawer" temporary color="surface" width="260">
@@ -46,9 +54,44 @@ export default {
     }),
 
     methods: {
-        logout() {
-            // TODO: wire up to the auth/logout endpoint
+        refreshHome() {
+            // Full reload back to the home page (same behaviour as clicking the YouTube logo)
+            window.location.assign('/')
         },
     },
 }
 </script>
+
+<style scoped>
+.brand-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px 4px 0;
+    border-radius: 8px;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* jalibi.png is the full poster (triangle + "KEEP DISTANCE"), so zoom in on the face */
+.header-avatar {
+    position: relative;
+    overflow: hidden;
+}
+
+.header-avatar__img {
+    position: absolute;
+    width: 183%;
+    height: 183%;
+    max-width: none;
+    left: -41.7%;
+    top: -15.7%;
+}
+
+.brand-link:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 2px;
+}
+</style>
