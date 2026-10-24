@@ -362,8 +362,14 @@
                         </div>
                     </div>
 
-                    <div v-if="nextPageToken && results.length" class="d-flex justify-center mt-4">
-                        <button class="yt-pill" @click="searchVideos(true)">Load more</button>
+                    <!-- Infinite scroll: loads the next page when this row nears the viewport -->
+                    <div
+                        v-if="nextPageToken && results.length"
+                        v-intersect="{ handler: onResultsEndVisible, options: { rootMargin: '0px 0px 600px 0px' } }"
+                        class="load-more-row mt-4"
+                    >
+                        <v-progress-circular v-if="loadingMore" indeterminate color="primary" size="28" />
+                        <button v-else-if="autoLoadPaused" class="yt-pill" @click="retryLoadMore">Load more</button>
                     </div>
                 </div>
             </aside>
@@ -503,8 +509,14 @@
                     </div>
                 </div>
 
-                <div v-if="nextPageToken && results.length" class="d-flex justify-center mt-8">
-                    <button class="yt-pill" @click="searchVideos(true)">Load more</button>
+                <!-- Infinite scroll: loads the next page when this row nears the viewport -->
+                <div
+                    v-if="nextPageToken && results.length"
+                    v-intersect="{ handler: onResultsEndVisible, options: { rootMargin: '0px 0px 600px 0px' } }"
+                    class="load-more-row mt-8"
+                >
+                    <v-progress-circular v-if="loadingMore" indeterminate color="primary" size="28" />
+                    <button v-else-if="autoLoadPaused" class="yt-pill" @click="retryLoadMore">Load more</button>
                 </div>
             </section>
         </div>
@@ -539,6 +551,11 @@ export default {
             currentChannelTitle: "",
             loading: false,
             nextPageToken: "",
+            // infinite scroll
+            loadingMore: false,
+            resultsEndVisible: false,
+            autoLoadPaused: false, // set after a failed page load so we don't retry in a loop
+            searchGeneration: 0, // bumps on every new search so a late "load more" can't mix into new results
             snackbar: {
                 show: false,
                 message: "",
@@ -984,10 +1001,17 @@ async fetchDurations(videoList) {
             const query = (this.searchQuery || "").trim();
             if (!query) return;
 
-            if (!loadMore) {
+            if (loadMore) {
+                // Only one page request at a time, and never while a new search is running
+                if (this.loadingMore || this.loading || !this.nextPageToken) return;
+                this.loadingMore = true;
+            } else {
                 // Huwag muna i-clear ang results para hindi "kumukurap" ang screen
-                this.loading = true; 
+                this.loading = true;
+                this.autoLoadPaused = false;
+                this.searchGeneration++;
             }
+            const generation = this.searchGeneration;
 
             try {
                 const response = await this.youtubeRequest(YOUTUBE_SEARCH_ENDPOINT, {
@@ -996,6 +1020,9 @@ async fetchDurations(videoList) {
                     order: this.searchOrder,
                     pageToken: loadMore ? this.nextPageToken : undefined,
                 });
+
+                // A newer search started while this page was loading — drop it
+                if (generation !== this.searchGeneration) return;
 
                 const items = response.data.items || [];
                 const mapped = items.map((item) => ({
@@ -1025,9 +1052,35 @@ async fetchDurations(videoList) {
                 } else {
                     console.warn("Quota reached for next results, but keeping current view.");
                 }
+
+                // Stop auto-loading and show the Load more button instead,
+                // otherwise the still-visible sentinel would retry (and burn quota) in a loop.
+                if (loadMore && generation === this.searchGeneration) this.autoLoadPaused = true;
             } finally {
-                this.loading = false;
+                if (loadMore) {
+                    this.loadingMore = false;
+                } else if (generation === this.searchGeneration) {
+                    this.loading = false;
+                }
+                // If the new page was too short to push the sentinel off screen, keep going
+                this.$nextTick(this.maybeAutoLoad);
             }
+        },
+
+        onResultsEndVisible(isVisible) {
+            this.resultsEndVisible = isVisible;
+            this.maybeAutoLoad();
+        },
+
+        maybeAutoLoad() {
+            if (!this.resultsEndVisible || this.autoLoadPaused) return;
+            if (this.loading || this.loadingMore || !this.nextPageToken) return;
+            this.searchVideos(true);
+        },
+
+        retryLoadMore() {
+            this.autoLoadPaused = false;
+            this.searchVideos(true);
         },
 
         playVideo(video) {
@@ -1330,6 +1383,13 @@ async fetchDurations(videoList) {
     min-height: 100%;
     padding-bottom: 48px;
     overflow-x: clip; /* theater player bleeds to the viewport edges */
+}
+
+.load-more-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 44px; /* keeps the observer target measurable when it's empty */
 }
 
 .empty-text {

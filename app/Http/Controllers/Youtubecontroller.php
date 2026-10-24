@@ -28,15 +28,25 @@ class Youtubecontroller extends Controller
             $response = Http::get('https://www.googleapis.com/youtube/v3/videos', [
                 'key' => $key,
                 'id' => $request->ids,
-                'part' => 'contentDetails',
+                // "status" costs no extra quota and tells us if the owner allows embedding
+                'part' => 'contentDetails,status',
             ]);
 
             if ($response->successful()) {
                 $durations = [];
+                $notEmbeddable = [];
                 foreach ($response->json('items', []) as $item) {
                     $durations[$item['id']] = $item['contentDetails']['duration'];
+
+                    // false = "Playback on other websites has been disabled by the video owner"
+                    if (($item['status']['embeddable'] ?? true) === false) {
+                        $notEmbeddable[] = $item['id'];
+                    }
                 }
-                return response()->json($durations);
+                return response()->json([
+                    'durations' => $durations,
+                    'notEmbeddable' => $notEmbeddable,
+                ]);
             }
 
             if ($response->status() === 403) {
