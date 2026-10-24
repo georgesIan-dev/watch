@@ -200,8 +200,18 @@
                 </div>
 
                 <div class="player-frame-wrap">
+                    <!-- Fallback: plain embed when www.youtube.com (the IFrame API) is blocked on this network -->
+                    <iframe
+                        v-if="playerFallback"
+                        :src="`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&rel=0`"
+                        title="YouTube video player"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowfullscreen
+                        class="player-frame"
+                    ></iframe>
                     <!-- The YouTube IFrame API puts its iframe in here (see createPlayer) -->
-                    <div ref="playerSlot" class="player-frame"></div>
+                    <div v-else ref="playerSlot" class="player-frame"></div>
 
                     <!-- Our own message instead of YouTube's "Video unavailable" screen -->
                     <div v-if="playerError" class="player-error">
@@ -554,6 +564,8 @@
 import axios from "axios";
 const YOUTUBE_SEARCH_ENDPOINT = "/api/youtube/search";
 const YT_IFRAME_API_SRC = "https://www.youtube.com/iframe_api";
+// A proxy/firewall can make the API hang instead of failing, so give up after this long
+const YT_API_TIMEOUT_MS = 8000;
 
 // IFrame Player API error codes (https://developers.google.com/youtube/iframe_api_reference#onError)
 const YT_ERROR_NOT_FOUND = 100; // removed or private
@@ -565,18 +577,23 @@ function loadYouTubeIframeApi() {
     if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
     if (!ytApiPromise) {
         ytApiPromise = new Promise((resolve, reject) => {
+            const fail = (message) => {
+                clearTimeout(timer);
+                ytApiPromise = null; // allow a retry on the next page visit
+                reject(new Error(message));
+            };
+            const timer = setTimeout(() => fail("Timed out loading the YouTube IFrame API"), YT_API_TIMEOUT_MS);
+
             const previous = window.onYouTubeIframeAPIReady;
             window.onYouTubeIframeAPIReady = () => {
+                clearTimeout(timer);
                 if (typeof previous === "function") previous();
                 resolve(window.YT);
             };
             const script = document.createElement("script");
             script.src = YT_IFRAME_API_SRC;
             script.async = true;
-            script.onerror = () => {
-                ytApiPromise = null; // allow a retry on the next video
-                reject(new Error("Failed to load the YouTube IFrame API"));
-            };
+            script.onerror = () => fail("Failed to load the YouTube IFrame API");
             document.head.appendChild(script);
         });
     }
@@ -614,6 +631,9 @@ export default {
             blockedTooltip: "The owner turned off playback on other websites",
             // set when the player reports an error; shows our own overlay
             playerError: null,
+            // true when the IFrame API can't load (e.g. www.youtube.com blocked by a proxy);
+            // we then use the plain embed iframe without error handling
+            playerFallback: false,
             snackbar: {
                 show: false,
                 message: "",
@@ -961,7 +981,7 @@ async fetchDurations(videoList) {
         // The player instance lives on this._ytPlayer (not in data) so Vue doesn't
         // wrap YouTube's object in a reactive proxy.
         loadPlayer(videoId) {
-            if (!videoId) return;
+            if (!videoId || this.playerFallback) return; // fallback iframe follows currentVideoId on its own
             if (this._ytPlayer) {
                 // Before onReady the player can't take commands; onReady loads the latest video.
                 if (this._ytPlayerReady) this._ytPlayer.loadVideoById(videoId);
@@ -1000,8 +1020,11 @@ async fetchDurations(videoList) {
                     },
                 });
             } catch (error) {
-                console.error("YouTube player error:", error);
-                this.showError("Couldn't load the YouTube player. Check your connection and try again.");
+                // Don't leave the user with a blank player: fall back to the plain embed,
+                // which only needs youtube-nocookie.com. Videos still play; we just can't
+                // catch "can't be played here" errors in this mode.
+                console.warn("YouTube IFrame API unavailable, using plain embed:", error);
+                this.playerFallback = true;
             } finally {
                 this._ytPlayerCreating = false;
             }
@@ -1819,7 +1842,6 @@ async fetchDurations(videoList) {
     outline-offset: 2px;
 }
 
-/* While dragging/resizing, stop the iframe from swallowing the pointer */
 /* The IFrame API's iframe has no scoped attribute, hence :deep */
 .player-frame :deep(iframe) {
     display: block;
@@ -1828,6 +1850,7 @@ async fetchDurations(videoList) {
     border: 0;
 }
 
+/* While dragging/resizing, stop the iframe from swallowing the pointer */
 .player-host--dragging .player-frame {
     pointer-events: none;
 }
